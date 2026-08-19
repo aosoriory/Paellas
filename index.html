@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>La lista de la paella</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+  .paella-input { border: 1px solid #E8D9B8; background: #fff; border-radius: 8px; padding: 6px 8px; font-family: 'Inter', sans-serif; font-size: 14px; color: #2C2216; width: 100%; }
+  .paella-input:focus { outline: 2px solid #E3A72E; outline-offset: 1px; }
+  .tab-btn { border: none; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px; padding: 10px 14px; border-radius: 10px; display:flex; align-items:center; gap:6px; }
+  .icon-btn { border: none; background: transparent; cursor: pointer; display:flex; align-items:center; justify-content:center; border-radius: 8px; }
+  .icon-btn:hover { background: #F0E5CB; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  window.addEventListener('error', function(e) {
+    document.getElementById('root').innerHTML =
+      '<div style="font-family:monospace;white-space:pre-wrap;padding:16px;color:#900;background:#fee;">ERROR:\n' +
+      (e.message || '') + '\n\nArchivo: ' + (e.filename || '') + '\nLínea: ' + (e.lineno || '') + ':' + (e.colno || '') +
+      '</div>';
+  });
+</script>
+
+<!-- React sin build (JSX se compila en el navegador con Babel standalone) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Cliente de Supabase -->
+
+<script>
+const {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo
+} = React;
+
+// ============ 1) CONFIGURA AQUÍ TU SUPABASE ============
+// Pega la URL del proyecto y la clave "anon public" (Supabase > Project Settings > API).
+const SUPABASE_URL = "https://awhuyuhjqmpteqnxwlgw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3aHV5dWhqcW1wdGVxbnh3bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDQ0NjMsImV4cCI6MjEwMjcyMDQ2M30.0X2bxSxFn93am5EXHbxLrE0GZg_ujtAcLoKkjn5pPS8";
+// =========================================================
+
+const storage = {
+  async get(key) {
+    const url = `${SUPABASE_URL}/rest/v1/app_storage?key=eq.${encodeURIComponent(key)}&select=value`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+      }
+    });
+    if (!res.ok) throw new Error(`Supabase GET ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    return rows.length ? rows[0].value : null;
+  },
+  async set(key, value) {
+    const url = `${SUPABASE_URL}/rest/v1/app_storage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
+    });
+    if (!res.ok) throw new Error(`Supabase POST ${res.status}: ${await res.text()}`);
+    return true;
+  }
+};
+const THEME = {
+  cream: "#FBF3E1",
+  card: "#FFFDF8",
+  ink: "#2C2216",
+  inkSoft: "#6B5E48",
+  saffron: "#E3A72E",
+  saffronDark: "#B9821E",
+  tomato: "#C1452A",
+  tomatoDark: "#9C3520",
+  olive: "#707C3C",
+  oliveDark: "#576125",
+  border: "#E8D9B8",
+  borderSoft: "#F0E5CB"
+};
+function uid(prefix) {
+  return prefix + Math.random().toString(36).slice(2, 9);
+}
+function fmtQty(n) {
+  const r = Math.round(n * 100) / 100;
+  return String(r);
+}
+function hi(name, qty, note) {
+  return {
+    id: uid("hi"),
+    name,
+    qty,
+    note: note || ""
+  };
+}
+const SEED_SUPERMARKETS = [{
+  id: "s1",
+  name: "Mercadona"
+}, {
+  id: "s2",
+  name: "Frutería del barrio"
+}, {
+  id: "s3",
+  name: "Especias La Bahía"
+}];
+const SEED_INGREDIENTS = [{
+  id: "i1",
+  category: "Paellas",
+  name: "Tomate triturado",
+  unit: "botes 870 gr",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i2",
+  category: "Paellas",
+  name: "Pimientos rojos y verdes",
+  unit: "bolsas congeladas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i3",
+  category: "Paellas",
+  name: "Pimientos rojos frescos",
+  unit: "unidades",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i4",
+  category: "Paellas",
+  name: "Judías verdes planas (congeladas mejor)",
+  unit: "bolsas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i5",
+  category: "Paellas",
+  name: "Cebolla congelada",
+  unit: "bolsas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i6",
+  category: "Paellas",
+  name: "Aceite de oliva suave",
+  unit: "botellas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i7",
+  category: "Paellas",
+  name: "Limones",
+  unit: "bolsa",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i8",
+  category: "Paellas",
+  name: "Arroz redondo (mejor La Fallera verde)",
+  unit: "kg",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i9",
+  category: "Paellas",
+  name: "Caldo de pollo",
+  unit: "bricks",
+  normalQty: 10,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i10",
+  category: "Paellas",
+  name: "Pimentón dulce",
+  unit: "bote",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i11",
+  category: "Paellas",
+  name: "Pimienta",
+  unit: "bote",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i12",
+  category: "Paellas",
+  name: "Sal",
+  unit: "bote",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i13",
+  category: "Paellas",
+  name: "Colorante paella",
+  unit: "sobre",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i14",
+  category: "Paellas",
+  name: "Pollo troceado (sin deshuesar)",
+  unit: "bandejas",
+  normalQty: 9,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i15",
+  category: "Paellas",
+  name: "Fairy (Hacendado)",
+  unit: "botella",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "s1",
+  imageUrl: ""
+}, {
+  id: "i16",
+  category: "Paellas",
+  name: "Ajos",
+  unit: "cabezas",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i17",
+  category: "Bebidas — Mojitos",
+  name: "Mojitos (preparado)",
+  unit: "botella",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i18",
+  category: "Bebidas — Mojitos",
+  name: "Hierbabuena",
+  unit: "manojo",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i19",
+  category: "Bebidas — Mojitos",
+  name: "Hielo picado especial",
+  unit: "bolsa",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i20",
+  category: "Bebidas — Sangría",
+  name: "Vino tinto (marca básica)",
+  unit: "l",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i21",
+  category: "Bebidas — Sangría",
+  name: "Fanta naranja (para sangría)",
+  unit: "l",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i22",
+  category: "Bebidas — Sangría",
+  name: "Fanta limón (para sangría)",
+  unit: "l",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i23",
+  category: "Bebidas — Sangría",
+  name: "Ginebra mala",
+  unit: "botella",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i24",
+  category: "Bebidas — Sangría",
+  name: "Melón",
+  unit: "unidad",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i25",
+  category: "Bebidas — Sangría",
+  name: "Melocotón en almíbar",
+  unit: "lata 470 gr",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i26",
+  category: "Bebidas — Sangría",
+  name: "Azúcar",
+  unit: "kg",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i27",
+  category: "Bebidas — Gin-tonic",
+  name: "Tónicas baratas",
+  unit: "unidades",
+  normalQty: 12,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i28",
+  category: "Bebidas — Gin-tonic",
+  name: "Ginebra (marca decente)",
+  unit: "botella",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i29",
+  category: "Cervezas",
+  name: "Cerveza Estrella Galicia",
+  unit: "latas",
+  normalQty: 40,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i30",
+  category: "Cervezas",
+  name: "Cerveza con limón",
+  unit: "latas",
+  normalQty: 12,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i31",
+  category: "Cocacolas",
+  name: "Coca-Cola Zero",
+  unit: "latas",
+  normalQty: 16,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i32",
+  category: "Cocacolas",
+  name: "Coca-Cola Light",
+  unit: "latas",
+  normalQty: 10,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i33",
+  category: "Cocacolas",
+  name: "Coca-Cola normal",
+  unit: "latas",
+  normalQty: 16,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i34",
+  category: "Botellas grandes",
+  name: "Coca-Cola 2L sin cafeína",
+  unit: "botellas",
+  normalQty: 4,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i35",
+  category: "Botellas grandes",
+  name: "Fanta naranja 2L",
+  unit: "botellas",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i36",
+  category: "Botellas grandes",
+  name: "Fanta limón 2L",
+  unit: "botellas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i37",
+  category: "Botellas grandes",
+  name: "Agua garrafa 5L",
+  unit: "garrafas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i38",
+  category: "Botellas grandes",
+  name: "Bolsas de hielo",
+  unit: "bolsas",
+  normalQty: 6,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i39",
+  category: "Aperitivos",
+  name: "Cacahuetes",
+  unit: "bolsas",
+  normalQty: 5,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i40",
+  category: "Aperitivos",
+  name: "Quicos",
+  unit: "bolsas",
+  normalQty: 6,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i41",
+  category: "Aperitivos",
+  name: "Gusanitos",
+  unit: "bolsas",
+  normalQty: 4,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i42",
+  category: "Aperitivos",
+  name: "Patatas lisas",
+  unit: "bolsas",
+  normalQty: 8,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i43",
+  category: "Aperitivos",
+  name: "Patatas onduladas",
+  unit: "bolsas",
+  normalQty: 6,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i44",
+  category: "Aperitivos",
+  name: "Aceitunas rellenas de anchoa",
+  unit: "botes",
+  normalQty: 6,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i45",
+  category: "Aperitivos",
+  name: "Cuñas de queso",
+  unit: "unidades",
+  normalQty: 5,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i46",
+  category: "Aperitivos",
+  name: "Fuet",
+  unit: "unidades",
+  normalQty: 5,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i47",
+  category: "Aperitivos",
+  name: "Crema de queso untar ligero",
+  unit: "tarrinas",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "s1",
+  imageUrl: ""
+}, {
+  id: "i48",
+  category: "Aperitivos",
+  name: "Colines / Regañá",
+  unit: "paquetes",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i49",
+  category: "Aperitivos",
+  name: "Nachos",
+  unit: "bolsas",
+  normalQty: 4,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i50",
+  category: "Aperitivos",
+  name: "Guacamole untar (o 1 grande)",
+  unit: "tarrinas",
+  normalQty: 2,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i51",
+  category: "Vajilla de plástico",
+  name: "Platos",
+  unit: "unidades",
+  normalQty: 100,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i52",
+  category: "Vajilla de plástico",
+  name: "Vasos",
+  unit: "unidades",
+  normalQty: 100,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i53",
+  category: "Vajilla de plástico",
+  name: "Vasos grandes para copas",
+  unit: "unidades",
+  normalQty: 40,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i54",
+  category: "Vajilla de plástico",
+  name: "Cucharas",
+  unit: "unidades",
+  normalQty: 100,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i55",
+  category: "Vajilla de plástico",
+  name: "Papel de cocina",
+  unit: "rollos",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i56",
+  category: "Vajilla de plástico",
+  name: "Servilletas",
+  unit: "unidades",
+  normalQty: 200,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i57",
+  category: "Vajilla de plástico",
+  name: "Tacitas de café para postre",
+  unit: "unidades",
+  normalQty: 50,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i58",
+  category: "Vajilla de plástico",
+  name: "Cucharitas de postre",
+  unit: "unidades",
+  normalQty: 75,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i59",
+  category: "Vajilla de plástico",
+  name: "Pajitas",
+  unit: "paquete",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i60",
+  category: "Postre — Mousse de limón",
+  name: "Leche condensada",
+  unit: "botes",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i61",
+  category: "Postre — Mousse de limón",
+  name: "Nata montada",
+  unit: "botes",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i62",
+  category: "Postre — Mousse de limón",
+  name: "Limones (mousse limón)",
+  unit: "unidades",
+  normalQty: 12,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i63",
+  category: "Postre — Mousse de limón",
+  name: "Conguitos",
+  unit: "bolsa",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i64",
+  category: "Postre — Mousse de chocolate",
+  name: "Huevos",
+  unit: "unidades",
+  normalQty: 6,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i65",
+  category: "Postre — Mousse de chocolate",
+  name: "Mantequilla",
+  unit: "paquete",
+  normalQty: 1,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i66",
+  category: "Postre — Mousse de chocolate",
+  name: "Chocolate con leche para postres",
+  unit: "tabletas",
+  normalQty: 4,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}, {
+  id: "i67",
+  category: "Postre — Mousse de chocolate",
+  name: "Limones (mousse chocolate)",
+  unit: "unidades",
+  normalQty: 3,
+  currentQty: 0,
+  supermarketId: "",
+  imageUrl: ""
+}];
+const SEED_HISTORY = [{
+  id: "y2025",
+  year: 2025,
+  categories: [{
+    id: uid("c"),
+    name: "Paellas",
+    note: "",
+    items: [hi("Tomate triturado", "3 botes 870 gr"), hi("Pimientos rojos y verdes", "2 bolsas congeladas"), hi("Pimientos rojos frescos", "2"), hi("Judías verdes planas", "2 bolsas", "Congeladas mejor"), hi("Cebolla", "2 bolsas congeladas"), hi("Aceite de oliva suave", "2"), hi("Limones", "1 bolsa"), hi("Arroz redondo", "3 kg", "Mejor si es La Fallera verde"), hi("Caldo de pollo", "10 bricks"), hi("Pimentón dulce", "1"), hi("Pimienta", "1"), hi("Sal", "1"), hi("Colorante paella", "1"), hi("Pollo troceado (sin deshuesar)", "9 bandejas"), hi("Fairy", "1", "Marca Hacendado"), hi("Ajos", "")]
+  }, {
+    id: uid("c"),
+    name: "Bebidas — Mojitos",
+    note: "",
+    items: [hi("Mojitos", ""), hi("Hierbabuena", ""), hi("Hielo picado especial", "")]
+  }, {
+    id: uid("c"),
+    name: "Bebidas — Sangría",
+    note: "Marcas malas, para sangría. Se acabó enseguida",
+    items: [hi("Vino tinto", "2 l"), hi("Fanta naranja", "1 l"), hi("Fanta limón", "1 l"), hi("Ginebra mala", "1 botella"), hi("Melón", "1"), hi("Melocotón en almíbar", "470 gr"), hi("Azúcar", "1 kg")]
+  }, {
+    id: uid("c"),
+    name: "Bebidas — Gin-tonic",
+    note: "",
+    items: [hi("Tónicas baratas", "12"), hi("Ginebra (marca decente)", "1 botella")]
+  }, {
+    id: uid("c"),
+    name: "Cervezas",
+    note: "",
+    items: [hi("Cerveza Estrella Galicia", "40 latas (4 cajas de 10)", "Sobraron 8"), hi("Cerveza con limón", "12 latas", "Sobraron 8")]
+  }, {
+    id: uid("c"),
+    name: "Cocacolas",
+    note: "",
+    items: [hi("Coca-Cola Zero", "16", "Sobraron 11"), hi("Coca-Cola Light", "10", "¿Duda sobre si hizo falta?"), hi("Coca-Cola normal", "16", "Sobraron 7")]
+  }, {
+    id: uid("c"),
+    name: "Botellas grandes",
+    note: "",
+    items: [hi("Coca-Cola 2L sin cafeína", "4", "Faltó"), hi("Fanta naranja 2L", "3"), hi("Fanta limón 2L", "2"), hi("Agua garrafa 5L", "2 garrafas", "Comprar más si no funciona la fuente"), hi("Bolsas de hielo", "6")]
+  }, {
+    id: uid("c"),
+    name: "Aperitivos",
+    note: "Sobró muchísimo",
+    items: [hi("Cacahuetes", "5"), hi("Quicos", "6"), hi("Gusanitos", "4"), hi("Patatas lisas", "8"), hi("Patatas onduladas", "6"), hi("Aceitunas rellenas de anchoa", "6"), hi("Cuñas de queso", "5"), hi("Fuet", "5"), hi("Crema de queso untar ligero (Mercadona)", "3"), hi("Colines / Regañá", "3"), hi("Nachos", "4"), hi("Guacamole untar", "2 (o 1 grande)")]
+  }, {
+    id: uid("c"),
+    name: "Vajilla de plástico",
+    note: "",
+    items: [hi("Platos", "100"), hi("Vasos", "100"), hi("Vasos grandes para copas", "40"), hi("Cucharas", "100"), hi("Papel de cocina", "3 rollos"), hi("Servilletas", "≈200"), hi("Tacitas de café para postre", "50"), hi("Cucharitas de postre", "75"), hi("Pajitas", "1 paquete")]
+  }, {
+    id: uid("c"),
+    name: "Postre — Mousse de limón",
+    note: "",
+    items: [hi("Leche condensada", "3 botes"), hi("Nata montada", "3 botes"), hi("Limones", "12"), hi("Conguitos", "1 bolsa")]
+  }, {
+    id: uid("c"),
+    name: "Postre — Mousse de chocolate",
+    note: "",
+    items: [hi("Huevos", "media docena"), hi("Mantequilla", ""), hi("Chocolate con leche para postres", "4 tabletas"), hi("Limones", "3")]
+  }]
+}];
+function Icon({
+  children,
+  size = 16
+}) {
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: size,
+      lineHeight: 1,
+      display: "inline-block"
+    }
+  }, children);
+}
+function ImgThumb({
+  url,
+  size = 44
+}) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: size,
+        height: size,
+        borderRadius: 8,
+        background: THEME.borderSoft,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 14
+    }, "🖼️"));
+  }
+  return /*#__PURE__*/React.createElement("img", {
+    src: url,
+    onError: () => setBroken(true),
+    alt: "",
+    style: {
+      width: size,
+      height: size,
+      borderRadius: 8,
+      objectFit: "cover",
+      flexShrink: 0,
+      border: `1px solid ${THEME.border}`
+    }
+  });
+}
+function NoteBadge({
+  note
+}) {
+  if (!note) return null;
+  const lower = note.toLowerCase();
+  let bg = THEME.borderSoft,
+    color = THEME.inkSoft;
+  if (lower.includes("sobr")) {
+    bg = "#EAEEDA";
+    color = THEME.oliveDark;
+  } else if (lower.includes("falt")) {
+    bg = "#FBEAE4";
+    color = THEME.tomatoDark;
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: bg,
+      color,
+      fontSize: 11,
+      fontWeight: 600,
+      borderRadius: 20,
+      padding: "2px 8px",
+      whiteSpace: "nowrap"
+    }
+  }, note);
+}
+function App() {
+  const [data, setData] = useState(null);
+  const [shoppingList, setShoppingList] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [tab, setTab] = useState("shopping");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [savingNote, setSavingNote] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        let d = await storage.get("paella-club-data");
+        if (!d) {
+          d = {
+            ingredients: SEED_INGREDIENTS,
+            supermarkets: SEED_SUPERMARKETS
+          };
+          await storage.set("paella-club-data", d);
+        }
+        let sl = await storage.get("paella-shopping-list");
+        let h = await storage.get("paella-history");
+        if (!h) {
+          h = SEED_HISTORY;
+          await storage.set("paella-history", h);
+        }
+        if (!cancelled) {
+          setData(d);
+          setShoppingList(sl);
+          setHistory(h);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setError("No se ha podido conectar con Supabase. Revisa la URL y la clave.");
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const persistData = useCallback(async next => {
+    setData(next);
+    try {
+      setSavingNote("Guardando…");
+      await storage.set("paella-club-data", next);
+      setSavingNote("Guardado");
+      setTimeout(() => setSavingNote(""), 900);
+    } catch {
+      setError("No se ha podido guardar el cambio.");
+      setTimeout(() => setError(""), 2500);
+    }
+  }, []);
+  const persistShoppingList = useCallback(async next => {
+    setShoppingList(next);
+    try {
+      await storage.set("paella-shopping-list", next);
+    } catch {
+      setError("No se ha podido guardar la lista de la compra.");
+      setTimeout(() => setError(""), 2500);
+    }
+  }, []);
+  const persistHistory = useCallback(async next => {
+    setHistory(next);
+    try {
+      setSavingNote("Guardando…");
+      await storage.set("paella-history", next);
+      setSavingNote("Guardado");
+      setTimeout(() => setSavingNote(""), 900);
+    } catch {
+      setError("No se ha podido guardar el historial.");
+      setTimeout(() => setError(""), 2500);
+    }
+  }, []);
+  const addYear = year => {
+    const y = parseInt(year, 10);
+    if (!y || history.some(h => h.year === y)) return;
+    persistHistory([...history, {
+      id: uid("y"),
+      year: y,
+      categories: []
+    }].sort((a, b) => b.year - a.year));
+  };
+  const removeYear = yearId => persistHistory(history.filter(h => h.id !== yearId));
+  const addCategory = (yearId, name) => {
+    if (!name.trim()) return;
+    persistHistory(history.map(h => h.id === yearId ? {
+      ...h,
+      categories: [...h.categories, {
+        id: uid("c"),
+        name: name.trim(),
+        note: "",
+        items: []
+      }]
+    } : h));
+  };
+  const updateCategory = (yearId, catId, patch) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    categories: h.categories.map(c => c.id === catId ? {
+      ...c,
+      ...patch
+    } : c)
+  } : h));
+  const removeCategory = (yearId, catId) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    categories: h.categories.filter(c => c.id !== catId)
+  } : h));
+  const addItem = (yearId, catId) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    categories: h.categories.map(c => c.id === catId ? {
+      ...c,
+      items: [...c.items, {
+        id: uid("hi"),
+        name: "",
+        qty: "",
+        note: ""
+      }]
+    } : c)
+  } : h));
+  const updateItem = (yearId, catId, itemId, patch) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    categories: h.categories.map(c => c.id === catId ? {
+      ...c,
+      items: c.items.map(it => it.id === itemId ? {
+        ...it,
+        ...patch
+      } : it)
+    } : c)
+  } : h));
+  const removeItem = (yearId, catId, itemId) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    categories: h.categories.map(c => c.id === catId ? {
+      ...c,
+      items: c.items.filter(it => it.id !== itemId)
+    } : c)
+  } : h));
+  const importCurrentListAsYear = year => {
+    const y = parseInt(year, 10);
+    if (!y || !shoppingList || shoppingList.items.length === 0) return;
+    const cat = {
+      id: uid("c"),
+      name: "Comprado este año",
+      note: "",
+      items: shoppingList.items.map(it => ({
+        id: uid("hi"),
+        name: it.name,
+        qty: `${fmtQty(it.qty)} ${it.unit}`.trim(),
+        note: it.checked ? "" : "No se llegó a comprar"
+      }))
+    };
+    const existing = history.find(h => h.year === y);
+    const next = existing ? history.map(h => h.year === y ? {
+      ...h,
+      categories: [...h.categories, cat]
+    } : h) : [...history, {
+      id: uid("y"),
+      year: y,
+      categories: [cat]
+    }].sort((a, b) => b.year - a.year);
+    persistHistory(next);
+  };
+  const updateIngredient = (id, patch) => persistData({
+    ...data,
+    ingredients: data.ingredients.map(ing => ing.id === id ? {
+      ...ing,
+      ...patch
+    } : ing)
+  });
+  const addIngredient = category => persistData({
+    ...data,
+    ingredients: [...data.ingredients, {
+      id: uid("i"),
+      category: category || "",
+      name: "",
+      unit: "",
+      normalQty: 0,
+      currentQty: 0,
+      supermarketId: "",
+      imageUrl: ""
+    }]
+  });
+  const removeIngredient = id => persistData({
+    ...data,
+    ingredients: data.ingredients.filter(i => i.id !== id)
+  });
+  const addSupermarket = name => {
+    if (name.trim()) persistData({
+      ...data,
+      supermarkets: [...data.supermarkets, {
+        id: uid("s"),
+        name: name.trim()
+      }]
+    });
+  };
+  const removeSupermarket = id => persistData({
+    ...data,
+    supermarkets: data.supermarkets.filter(s => s.id !== id),
+    ingredients: data.ingredients.map(i => i.supermarketId === id ? {
+      ...i,
+      supermarketId: ""
+    } : i)
+  });
+  const renameSupermarket = (id, name) => persistData({
+    ...data,
+    supermarkets: data.supermarkets.map(s => s.id === id ? {
+      ...s,
+      name
+    } : s)
+  });
+  const supermarketName = id => data?.supermarkets.find(s => s.id === id)?.name || "";
+  const doGenerate = () => {
+    const items = data.ingredients.map(ing => {
+      const need = Math.max(0, (Number(ing.normalQty) || 0) - (Number(ing.currentQty) || 0));
+      return {
+        id: ing.id,
+        name: ing.name || "(sin nombre)",
+        unit: ing.unit,
+        qty: need,
+        supermarketId: ing.supermarketId,
+        supermarketName: supermarketName(ing.supermarketId),
+        imageUrl: ing.imageUrl,
+        checked: false
+      };
+    }).filter(it => it.qty > 0);
+    persistShoppingList({
+      generatedAt: new Date().toISOString(),
+      items
+    });
+    setConfirmRegen(false);
+    setTab("shopping");
+  };
+  const requestGenerate = () => {
+    if (shoppingList && shoppingList.items.length > 0) setConfirmRegen(true);else doGenerate();
+  };
+  const toggleCheck = itemId => persistShoppingList({
+    ...shoppingList,
+    items: shoppingList.items.map(it => it.id === itemId ? {
+      ...it,
+      checked: !it.checked
+    } : it)
+  });
+  const grouped = useMemo(() => {
+    if (!shoppingList) return [];
+    const map = new Map();
+    for (const it of shoppingList.items) {
+      const key = it.supermarketName || "Sin supermercado asignado";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(it);
+    }
+    return Array.from(map.entries());
+  }, [shoppingList]);
+  const progress = useMemo(() => {
+    if (!shoppingList || shoppingList.items.length === 0) return {
+      done: 0,
+      total: 0,
+      pct: 0
+    };
+    const total = shoppingList.items.length,
+      done = shoppingList.items.filter(i => i.checked).length;
+    return {
+      done,
+      total,
+      pct: Math.round(done / total * 100)
+    };
+  }, [shoppingList]);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.cream,
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'Inter', sans-serif",
+      color: THEME.inkSoft
+    }
+  }, "Cargando la lista…");
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.cream,
+      minHeight: "100vh",
+      fontFamily: "'Inter', sans-serif",
+      color: THEME.ink
+    }
+  }, /*#__PURE__*/React.createElement("header", {
+    style: {
+      padding: "28px 20px 18px",
+      maxWidth: 720,
+      margin: "0 auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 26
+  }, "👨‍🍳"), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontWeight: 700,
+      fontSize: 28,
+      margin: 0
+    }
+  }, "La lista de la paella")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: "6px 0 0",
+      color: THEME.inkSoft,
+      fontSize: 14
+    }
+  }, "Lo que sobra un año, ya no se olvida al siguiente.")), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 720,
+      margin: "0 auto 12px",
+      padding: "0 20px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FBEAE4",
+      border: `1px solid ${THEME.tomato}`,
+      color: THEME.tomatoDark,
+      borderRadius: 10,
+      padding: "8px 12px",
+      fontSize: 13
+    }
+  }, "⚠️ ", error)), /*#__PURE__*/React.createElement("nav", {
+    style: {
+      maxWidth: 720,
+      margin: "0 auto",
+      padding: "0 20px",
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "shopping" ? THEME.saffron : "#fff",
+      color: tab === "shopping" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "shopping" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("shopping")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "🛒"), " Lista de la compra"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "ingredients" ? THEME.saffron : "#fff",
+      color: tab === "ingredients" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "ingredients" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("ingredients")
+  }, "Ingredientes"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "markets" ? THEME.saffron : "#fff",
+      color: tab === "markets" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "markets" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("markets")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "🏪"), " Supermercados"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "history" ? THEME.saffron : "#fff",
+      color: tab === "history" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("history")
+  }, "Historial")), /*#__PURE__*/React.createElement("main", {
+    style: {
+      maxWidth: 720,
+      margin: "0 auto",
+      padding: "18px 20px 60px"
+    }
+  }, tab === "ingredients" && /*#__PURE__*/React.createElement(IngredientsTab, {
+    data: data,
+    updateIngredient: updateIngredient,
+    addIngredient: addIngredient,
+    removeIngredient: removeIngredient,
+    onGenerate: requestGenerate
+  }), tab === "markets" && /*#__PURE__*/React.createElement(MarketsTab, {
+    supermarkets: data.supermarkets,
+    addSupermarket: addSupermarket,
+    removeSupermarket: removeSupermarket,
+    renameSupermarket: renameSupermarket
+  }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
+    shoppingList: shoppingList,
+    grouped: grouped,
+    progress: progress,
+    toggleCheck: toggleCheck,
+    onGenerate: requestGenerate
+  }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
+    history: history,
+    addYear: addYear,
+    removeYear: removeYear,
+    addCategory: addCategory,
+    updateCategory: updateCategory,
+    removeCategory: removeCategory,
+    addItem: addItem,
+    updateItem: updateItem,
+    removeItem: removeItem,
+    shoppingList: shoppingList,
+    importCurrentListAsYear: importCurrentListAsYear
+  })), savingNote && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: 16,
+      right: 16,
+      background: THEME.ink,
+      color: "#fff",
+      fontSize: 12,
+      padding: "6px 12px",
+      borderRadius: 20,
+      opacity: 0.9
+    }
+  }, savingNote), confirmRegen && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44,34,22,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 22,
+      maxWidth: 360,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      margin: "0 0 8px",
+      fontSize: 18
+    }
+  }, "¿Generar de nuevo?"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      color: THEME.inkSoft,
+      margin: "0 0 18px"
+    }
+  }, "Ya tienes una lista con ", shoppingList?.items.filter(i => i.checked).length || 0, " de ", shoppingList?.items.length || 0, " cosas marcadas. Si generas otra vez, se sustituirá."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => setConfirmRegen(false)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.tomato,
+      color: "#fff"
+    },
+    onClick: doGenerate
+  }, "Sí, generar de nuevo")))));
+}
+function IngredientsTab({
+  data,
+  updateIngredient,
+  addIngredient,
+  removeIngredient,
+  onGenerate
+}) {
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const ing of data.ingredients) {
+      const key = ing.category || "Sin categoría";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(ing);
+    }
+    return Array.from(map.entries());
+  }, [data.ingredients]);
+  const [openGroups, setOpenGroups] = useState(() => new Set(groups.length ? [groups[0][0]] : []));
+  const toggleGroup = key => setOpenGroups(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "Cantidad habitual = lo que hace falta un año normal. Tenemos ahora = lo que ya guardáis."), groups.map(([category, items]) => {
+    const open = openGroups.has(category);
+    return /*#__PURE__*/React.createElement("div", {
+      key: category,
+      style: {
+        marginBottom: 12,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => toggleGroup(category),
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "10px 14px",
+        background: THEME.borderSoft,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        fontWeight: 700,
+        fontSize: 15
+      }
+    }, category), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: THEME.inkSoft
+      }
+    }, items.length, " cosas")), open && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: 10,
+        background: THEME.cream
+      }
+    }, items.map(ing => /*#__PURE__*/React.createElement(IngredientRow, {
+      key: ing.id,
+      ing: ing,
+      data: data,
+      updateIngredient: updateIngredient,
+      removeIngredient: removeIngredient
+    })), /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: "#fff",
+        border: `1px dashed ${THEME.saffronDark}`,
+        color: THEME.saffronDark,
+        justifyContent: "center",
+        fontSize: 13
+      },
+      onClick: () => addIngredient(category === "Sin categoría" ? "" : category)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 13
+    }, "➕"), " Añadir a \"", category, "\"")));
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px dashed ${THEME.saffronDark}`,
+      color: THEME.saffronDark,
+      marginTop: 8,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => addIngredient("")
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ingrediente nuevo"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      width: "100%",
+      justifyContent: "center",
+      marginTop: 18,
+      padding: "12px 14px",
+      fontSize: 15
+    },
+    onClick: onGenerate
+  }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"));
+}
+function IngredientRow({
+  ing,
+  data,
+  updateIngredient,
+  removeIngredient
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 12,
+      padding: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement(ImgThumb, {
+    url: ing.imageUrl
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nombre del ingrediente",
+    value: ing.name,
+    onChange: e => updateIngredient(ing.id, {
+      name: e.target.value
+    }),
+    style: {
+      fontWeight: 600,
+      marginBottom: 8
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 11,
+      color: THEME.inkSoft
+    }
+  }, "Habitual"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "number",
+    step: "0.1",
+    value: ing.normalQty,
+    onChange: e => updateIngredient(ing.id, {
+      normalQty: e.target.value === "" ? "" : parseFloat(e.target.value)
+    })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 11,
+      color: THEME.inkSoft
+    }
+  }, "Tenemos ahora"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "number",
+    step: "0.1",
+    value: ing.currentQty,
+    onChange: e => updateIngredient(ing.id, {
+      currentQty: e.target.value === "" ? "" : parseFloat(e.target.value)
+    })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 11,
+      color: THEME.inkSoft
+    }
+  }, "Unidad"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "kg, l…",
+    value: ing.unit,
+    onChange: e => updateIngredient(ing.id, {
+      unit: e.target.value
+    })
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 6,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Categoría",
+    value: ing.category || "",
+    onChange: e => updateIngredient(ing.id, {
+      category: e.target.value
+    })
+  }), /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: ing.supermarketId,
+    onChange: e => updateIngredient(ing.id, {
+      supermarketId: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Sin supermercado"), data.supermarkets.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: s.id
+  }, s.name))), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "URL de imagen",
+    value: ing.imageUrl,
+    onChange: e => updateIngredient(ing.id, {
+      imageUrl: e.target.value
+    })
+  }))), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: () => removeIngredient(ing.id),
+    style: {
+      alignSelf: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 17
+  }, "🗑️"))));
+}
+function MarketsTab({
+  supermarkets,
+  addSupermarket,
+  removeSupermarket,
+  renameSupermarket
+}) {
+  const [newName, setNewName] = useState("");
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "Estos son los supermercados que podréis asignar a cada ingrediente."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, supermarkets.map(s => /*#__PURE__*/React.createElement("div", {
+    key: s.id,
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center",
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: "8px 10px"
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "🏪"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    style: {
+      border: "none",
+      padding: "2px 4px"
+    },
+    value: s.name,
+    onChange: e => renameSupermarket(s.id, e.target.value)
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: () => removeSupermarket(s.id)
+  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nuevo supermercado",
+    value: newName,
+    onChange: e => setNewName(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Enter" && newName.trim()) {
+        addSupermarket(newName);
+        setNewName("");
+      }
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.olive,
+      color: "#fff"
+    },
+    onClick: () => {
+      if (newName.trim()) {
+        addSupermarket(newName);
+        setNewName("");
+      }
+    }
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir")));
+}
+function PaellaDial({
+  pct,
+  done,
+  total
+}) {
+  const r = 30,
+    c = 2 * Math.PI * r,
+    offset = c - pct / 100 * c;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "76",
+    height: "76",
+    viewBox: "0 0 76 76"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "0",
+    y: "34",
+    width: "8",
+    height: "8",
+    rx: "2",
+    fill: THEME.border
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "68",
+    y: "34",
+    width: "8",
+    height: "8",
+    rx: "2",
+    fill: THEME.border
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "38",
+    cy: "38",
+    r: r,
+    fill: "#fff",
+    stroke: THEME.borderSoft,
+    strokeWidth: "8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "38",
+    cy: "38",
+    r: r,
+    fill: "none",
+    stroke: pct === 100 ? THEME.olive : THEME.saffron,
+    strokeWidth: "8",
+    strokeDasharray: c,
+    strokeDashoffset: offset,
+    strokeLinecap: "round",
+    transform: "rotate(-90 38 38)"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "38",
+    y: "42",
+    textAnchor: "middle",
+    fontSize: "15",
+    fontWeight: "700",
+    fontFamily: "'Fraunces', serif",
+    fill: THEME.ink
+  }, done, "/", total)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontWeight: 700,
+      fontSize: 16
+    }
+  }, pct, "% comprado"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft
+    }
+  }, total - done, " cosas por comprar")));
+}
+function ShoppingTab({
+  shoppingList,
+  grouped,
+  progress,
+  toggleCheck,
+  onGenerate
+}) {
+  if (!shoppingList || shoppingList.items.length === 0) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        padding: "40px 10px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 34,
+        marginBottom: 10
+      }
+    }, "🛒"), /*#__PURE__*/React.createElement("h3", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        margin: "0 0 6px"
+      }
+    }, "Aún no hay lista"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 14,
+        color: THEME.inkSoft,
+        margin: "0 0 18px"
+      }
+    }, "Ajusta las cantidades en Ingredientes y pulsa el botón para generar lo que hay que comprar este año."), /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: THEME.saffron,
+        color: "#fff",
+        margin: "0 auto"
+      },
+      onClick: onGenerate
+    }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"));
+  }
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 16,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement(PaellaDial, {
+    pct: progress.pct,
+    done: progress.done,
+    total: progress.total
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.inkSoft
+    },
+    onClick: onGenerate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "↩️"), " Regenerar")), grouped.map(([marketName, items]) => /*#__PURE__*/React.createElement("div", {
+    key: marketName,
+    style: {
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "🏪"), /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 15,
+      margin: 0,
+      color: THEME.oliveDark
+    }
+  }, marketName)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, items.map(it => /*#__PURE__*/React.createElement("label", {
+    key: it.id,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      background: it.checked ? "#F3EFE0" : THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: "9px 12px",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    onClick: e => {
+      e.preventDefault();
+      toggleCheck(it.id);
+    },
+    style: {
+      width: 20,
+      height: 20,
+      borderRadius: 6,
+      border: `2px solid ${it.checked ? THEME.olive : THEME.saffronDark}`,
+      background: it.checked ? THEME.olive : "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+      fontSize: 12,
+      color: "#fff"
+    }
+  }, it.checked && "✓"), /*#__PURE__*/React.createElement(ImgThumb, {
+    url: it.imageUrl,
+    size: 34
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      textDecoration: it.checked ? "line-through" : "none",
+      color: it.checked ? THEME.inkSoft : THEME.ink,
+      fontSize: 14
+    }
+  }, it.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600,
+      fontSize: 13,
+      color: THEME.tomatoDark,
+      whiteSpace: "nowrap"
+    }
+  }, fmtQty(it.qty), " ", it.unit)))))));
+}
+function HistoryTab({
+  history,
+  addYear,
+  removeYear,
+  addCategory,
+  updateCategory,
+  removeCategory,
+  addItem,
+  updateItem,
+  removeItem,
+  shoppingList,
+  importCurrentListAsYear
+}) {
+  const [openYear, setOpenYear] = useState(history && history.length ? history[0].id : null);
+  const [newYear, setNewYear] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 10,
+      marginBottom: 14,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      margin: 0,
+      flex: 1,
+      minWidth: 200
+    }
+  }, "Lo que se compró cada año y qué sobró o faltó."), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: editMode ? THEME.olive : "#fff",
+      color: editMode ? "#fff" : THEME.inkSoft,
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => setEditMode(e => !e)
+  }, "✏️ ", editMode ? "Listo" : "Editar")), history.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      color: THEME.inkSoft
+    }
+  }, "Todavía no hay años guardados."), history.map(h => {
+    const open = openYear === h.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: h.id,
+      style: {
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        marginBottom: 10,
+        overflow: "hidden",
+        background: THEME.card
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "12px 14px",
+        cursor: "pointer",
+        background: open ? THEME.borderSoft : "transparent"
+      },
+      onClick: () => setOpenYear(open ? null : h.id)
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        fontWeight: 700,
+        fontSize: 17
+      }
+    }, "Paella ", h.year), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: THEME.inkSoft
+      }
+    }, h.categories.reduce((n, c) => n + c.items.length, 0), " cosas"), editMode && /*#__PURE__*/React.createElement("button", {
+      className: "icon-btn",
+      onClick: e => {
+        e.stopPropagation();
+        removeYear(h.id);
+      }
+    }, /*#__PURE__*/React.createElement(Icon, null, "🗑️")))), open && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "10px 14px 14px"
+      }
+    }, h.categories.map(c => /*#__PURE__*/React.createElement("div", {
+      key: c.id,
+      style: {
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, editMode ? /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      style: {
+        fontWeight: 600,
+        maxWidth: 220
+      },
+      value: c.name,
+      onChange: e => updateCategory(h.id, c.id, {
+        name: e.target.value
+      })
+    }) : /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        fontSize: 14,
+        margin: 0,
+        color: THEME.saffronDark
+      }
+    }, c.name), editMode && /*#__PURE__*/React.createElement("button", {
+      className: "icon-btn",
+      onClick: () => removeCategory(h.id, c.id)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 14
+    }, "🗑️"))), editMode ? /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      placeholder: "Nota general (ej. sobró muchísimo)",
+      value: c.note,
+      onChange: e => updateCategory(h.id, c.id, {
+        note: e.target.value
+      }),
+      style: {
+        marginBottom: 8,
+        fontSize: 12
+      }
+    }) : c.note && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement(NoteBadge, {
+      note: c.note
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 5
+      }
+    }, c.items.map(it => /*#__PURE__*/React.createElement("div", {
+      key: it.id,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 13.5,
+        padding: "4px 0",
+        borderBottom: `1px solid ${THEME.borderSoft}`
+      }
+    }, editMode ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      style: {
+        flex: 2
+      },
+      value: it.name,
+      onChange: e => updateItem(h.id, c.id, it.id, {
+        name: e.target.value
+      }),
+      placeholder: "Nombre"
+    }), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      style: {
+        flex: 1
+      },
+      value: it.qty,
+      onChange: e => updateItem(h.id, c.id, it.id, {
+        qty: e.target.value
+      }),
+      placeholder: "Cantidad"
+    }), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      style: {
+        flex: 1.5
+      },
+      value: it.note,
+      onChange: e => updateItem(h.id, c.id, it.id, {
+        note: e.target.value
+      }),
+      placeholder: "Sobró / faltó…"
+    }), /*#__PURE__*/React.createElement("button", {
+      className: "icon-btn",
+      onClick: () => removeItem(h.id, c.id, it.id)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 14
+    }, "✖️"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1
+      }
+    }, it.name || "(sin nombre)"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: THEME.inkSoft,
+        fontWeight: 500,
+        whiteSpace: "nowrap"
+      }
+    }, it.qty), /*#__PURE__*/React.createElement(NoteBadge, {
+      note: it.note
+    }))))), editMode && /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: "transparent",
+        color: THEME.saffronDark,
+        fontSize: 12,
+        padding: "6px 4px"
+      },
+      onClick: () => addItem(h.id, c.id)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 13
+    }, "➕"), " Añadir cosa"))), editMode && /*#__PURE__*/React.createElement(AddCategoryRow, {
+      onAdd: name => addCategory(h.id, name)
+    })));
+  }), editMode && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 14,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Año nuevo (ej. 2026)",
+    value: newYear,
+    onChange: e => setNewYear(e.target.value),
+    style: {
+      maxWidth: 160
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.olive,
+      color: "#fff"
+    },
+    onClick: () => {
+      if (newYear.trim()) {
+        addYear(newYear);
+        setNewYear("");
+      }
+    }
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Guardar año")), editMode && shoppingList && shoppingList.items.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 18,
+      padding: 12,
+      border: `1px dashed ${THEME.border}`,
+      borderRadius: 10
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      margin: "0 0 8px"
+    }
+  }, "También puedes guardar la lista de la compra actual como registro de un año."), /*#__PURE__*/React.createElement(ImportYearRow, {
+    onImport: importCurrentListAsYear
+  })));
+}
+function ImportYearRow({
+  onImport
+}) {
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Año",
+    value: year,
+    onChange: e => setYear(e.target.value),
+    style: {
+      maxWidth: 120
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff"
+    },
+    onClick: () => onImport(year)
+  }, "Guardar lista actual como año"));
+}
+function AddCategoryRow({
+  onAdd
+}) {
+  const [name, setName] = useState("");
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nueva categoría (ej. Postres)",
+    value: name,
+    onChange: e => setName(e.target.value)
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.saffronDark
+    },
+    onClick: () => {
+      if (name.trim()) {
+        onAdd(name);
+        setName("");
+      }
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "➕"), " Añadir"));
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(/*#__PURE__*/React.createElement(App, null));
+</script>
+</body>
+</html>
