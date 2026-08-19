@@ -31,7 +31,6 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <!-- Cliente de Supabase -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
 const {
@@ -47,25 +46,32 @@ const SUPABASE_URL = "https://awhuyuhjqmpteqnxwlgw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3aHV5dWhqcW1wdGVxbnh3bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDQ0NjMsImV4cCI6MjEwMjcyMDQ2M30.0X2bxSxFn93am5EXHbxLrE0GZg_ujtAcLoKkjn5pPS8";
 // =========================================================
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const storage = {
   async get(key) {
-    const {
-      data,
-      error
-    } = await sb.from("app_storage").select("value").eq("key", key).maybeSingle();
-    if (error) throw error;
-    return data ? data.value : null;
+    const url = `${SUPABASE_URL}/rest/v1/app_storage?key=eq.${encodeURIComponent(key)}&select=value`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+      }
+    });
+    if (!res.ok) throw new Error(`Supabase GET ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    return rows.length ? rows[0].value : null;
   },
   async set(key, value) {
-    const {
-      error
-    } = await sb.from("app_storage").upsert({
-      key,
-      value,
-      updated_at: new Date().toISOString()
+    const url = `${SUPABASE_URL}/rest/v1/app_storage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
     });
-    if (error) throw error;
+    if (!res.ok) throw new Error(`Supabase POST ${res.status}: ${await res.text()}`);
     return true;
   }
 };
