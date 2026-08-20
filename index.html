@@ -138,6 +138,38 @@ const SEED_SUPERMARKETS = [{
   id: "s3",
   name: "Especias La Bahía"
 }];
+const FULLNESS_OPTIONS = ["Recién rellenada", "Bastante llena", "A medias", "Algo vacía", "Vacía: cambiar"];
+function seedInventoryItems(n) {
+  return Array.from({
+    length: n
+  }, () => ({
+    id: uid("it"),
+    holderId: "",
+    badState: false,
+    fullness: ""
+  }));
+}
+const SEED_INVENTORY = [{
+  id: "mt-bombonas",
+  name: "Bombonas",
+  trackFullness: true,
+  items: seedInventoryItems(3)
+}, {
+  id: "mt-patas",
+  name: "Patas",
+  trackFullness: false,
+  items: seedInventoryItems(3)
+}, {
+  id: "mt-quemadores",
+  name: "Quemadores",
+  trackFullness: false,
+  items: seedInventoryItems(3)
+}, {
+  id: "mt-paelleras",
+  name: "Paelleras",
+  trackFullness: false,
+  items: seedInventoryItems(3)
+}];
 const SEED_PEOPLE = [{
   id: "fam1",
   lastName: "Admin",
@@ -1955,6 +1987,227 @@ function AccountsTab({
     }
   }, "✓ Guardado")));
 }
+function InventoryItemRow({
+  item,
+  index,
+  families,
+  updateItem,
+  removeItem,
+  trackFullness
+}) {
+  const holderName = id => families.find(f => f.id === id)?.lastName || "";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft,
+      fontWeight: 600
+    }
+  }, "#", index + 1), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: removeItem,
+    title: "Eliminar"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "🗑️"))), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 10.5,
+      color: THEME.inkSoft
+    }
+  }, "¿Quién la tiene?"), /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: item.holderId,
+    onChange: e => updateItem({
+      holderId: e.target.value
+    }),
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Sin asignar"), families.map(f => /*#__PURE__*/React.createElement("option", {
+    key: f.id,
+    value: f.id
+  }, f.lastName || "(sin apellido)"))), trackFullness && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 10.5,
+      color: THEME.inkSoft
+    }
+  }, "Nivel de gas"), /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: item.fullness || "",
+    onChange: e => updateItem({
+      fullness: e.target.value
+    }),
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Sin indicar"), FULLNESS_OPTIONS.map(opt => /*#__PURE__*/React.createElement("option", {
+    key: opt,
+    value: opt
+  }, opt)))), /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: !!item.badState,
+    onChange: e => updateItem({
+      badState: e.target.checked
+    })
+  }), "Está en mal estado"), (item.holderId || item.badState) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      fontSize: 12,
+      color: THEME.inkSoft
+    }
+  }, item.holderId && /*#__PURE__*/React.createElement("span", null, "📍 ", holderName(item.holderId)), item.badState && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: THEME.tomatoDark,
+      marginLeft: 8
+    }
+  }, "⚠️ Mal estado")));
+}
+function MaterialTypeCard({
+  type,
+  families,
+  updateInventoryItem,
+  addInventoryItem,
+  removeInventoryItem
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 22
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 17,
+      margin: "0 0 6px"
+    }
+  }, type.name), type.trackFullness && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.borderSoft,
+      borderRadius: 10,
+      padding: "8px 12px",
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      marginBottom: 10,
+      whiteSpace: "pre-line"
+    }
+  }, "Llena: 25,5 kg\nVacía: 13 kg\nGas: 12,5 kg"), type.items.map((item, i) => /*#__PURE__*/React.createElement(InventoryItemRow, {
+    key: item.id,
+    item: item,
+    index: i,
+    families: families,
+    trackFullness: type.trackFullness,
+    updateItem: patch => updateInventoryItem(type.id, item.id, patch),
+    removeItem: () => removeInventoryItem(type.id, item.id)
+  })), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px dashed ${THEME.saffronDark}`,
+      color: THEME.saffronDark,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => addInventoryItem(type.id)
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ", type.name.toLowerCase()));
+}
+function InventoryTab({
+  inventory,
+  persistInventory,
+  people
+}) {
+  const [newTypeName, setNewTypeName] = useState("");
+  const families = useMemo(() => sortByLastName(people), [people]);
+  const updateInventoryItem = (typeId, itemId, patch) => persistInventory(inventory.map(t => t.id === typeId ? {
+    ...t,
+    items: t.items.map(it => it.id === itemId ? {
+      ...it,
+      ...patch
+    } : it)
+  } : t));
+  const addInventoryItem = typeId => persistInventory(inventory.map(t => t.id === typeId ? {
+    ...t,
+    items: [...t.items, {
+      id: uid("it"),
+      holderId: "",
+      badState: false,
+      fullness: ""
+    }]
+  } : t));
+  const removeInventoryItem = (typeId, itemId) => persistInventory(inventory.map(t => t.id === typeId ? {
+    ...t,
+    items: t.items.filter(it => it.id !== itemId)
+  } : t));
+  const addMaterialType = () => {
+    if (!newTypeName.trim()) return;
+    persistInventory([...inventory, {
+      id: uid("mt"),
+      name: newTypeName.trim(),
+      trackFullness: false,
+      items: []
+    }]);
+    setNewTypeName("");
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "El material se va repartiendo entre casas. Cualquiera puede registrar quién lo tiene ahora."), inventory.map(type => /*#__PURE__*/React.createElement(MaterialTypeCard, {
+    key: type.id,
+    type: type,
+    families: families,
+    updateInventoryItem: updateInventoryItem,
+    addInventoryItem: addInventoryItem,
+    removeInventoryItem: removeInventoryItem
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nuevo tipo de material (ej. neveras)",
+    value: newTypeName,
+    onChange: e => setNewTypeName(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Enter") addMaterialType();
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.olive,
+      color: "#fff"
+    },
+    onClick: addMaterialType
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")));
+}
 function AdminTab({
   people,
   persistPeople,
@@ -2170,6 +2423,7 @@ function App() {
   const [shoppingList, setShoppingList] = useState(null);
   const [history, setHistory] = useState(null);
   const [people, setPeople] = useState(null);
+  const [inventory, setInventory] = useState(null);
   const [session, setSession] = useState(null); // { familyId, personKey }
   const [previewSession, setPreviewSession] = useState(null); // admin-only "view as" mode
   const [tab, setTab] = useState("shopping");
@@ -2278,11 +2532,17 @@ function App() {
           }
         }
         if (peopleNeedsSave) await storage.set("paella-people", p);
+        let inv = await storage.get("paella-inventory");
+        if (!inv) {
+          inv = SEED_INVENTORY;
+          await storage.set("paella-inventory", inv);
+        }
         if (!cancelled) {
           setData(d);
           setShoppingList(sl);
           setHistory(h);
           setPeople(p);
+          setInventory(inv);
           try {
             const saved = JSON.parse(localStorage.getItem("paella_person_v1") || "null");
             if (saved) {
@@ -2318,6 +2578,18 @@ function App() {
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar las familias.");
+      setTimeout(() => setError(""), 2500);
+    }
+  }, []);
+  const persistInventory = useCallback(async next => {
+    setInventory(next);
+    try {
+      setSavingNote("Guardando…");
+      await storage.set("paella-inventory", next);
+      setSavingNote("Guardado");
+      setTimeout(() => setSavingNote(""), 900);
+    } catch {
+      setError("No se ha podido guardar el inventario.");
       setTimeout(() => setError(""), 2500);
     }
   }, []);
@@ -2694,7 +2966,7 @@ function App() {
       pct: Math.round(done / total * 100)
     };
   }, [shoppingList]);
-  if (loading || !people) return /*#__PURE__*/React.createElement("div", {
+  if (loading || !people || !inventory) return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
       minHeight: "100vh",
@@ -2899,7 +3171,17 @@ function App() {
       border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
     },
     onClick: () => setTab("history")
-  }, "Historial"), perms.canManageOptions && /*#__PURE__*/React.createElement("button", {
+  }, "Historial"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "inventory" ? THEME.saffron : "#fff",
+      color: tab === "inventory" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "inventory" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("inventory")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "📦"), " Inventario"), perms.canManageOptions && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: tab === "options" ? THEME.saffron : "#fff",
@@ -2979,6 +3261,10 @@ function App() {
     saveYearResults: saveYearResults,
     updateYearComment: updateYearComment,
     readOnly: !perms.canManageHistory
+  }), tab === "inventory" && /*#__PURE__*/React.createElement(InventoryTab, {
+    inventory: inventory,
+    persistInventory: persistInventory,
+    people: people
   }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
     people: people,
     persistPeople: persistPeople,
