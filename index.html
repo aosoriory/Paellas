@@ -1526,7 +1526,10 @@ function AccountsTab({
   session,
   isAdmin,
   history,
-  saveYearAccounts
+  saveYearAccounts,
+  gastosOpen,
+  updateGastosOpen,
+  adminNames
 }) {
   const [editingId, setEditingId] = useState(null);
   const [saveYear, setSaveYear] = useState(String(new Date().getFullYear()));
@@ -1570,7 +1573,26 @@ function AccountsTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cada familia apunta sus gastos (uno por concepto). El reparto se calcula solo, según lo indicado en Inscripción."), /*#__PURE__*/React.createElement("div", {
+  }, "Cada familia apunta sus gastos (uno por concepto). El reparto se calcula solo, según lo indicado en Inscripción."), isAdmin ? /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: gastosOpen ? "#fff" : THEME.olive,
+      color: gastosOpen ? THEME.tomatoDark : "#fff",
+      border: `1px solid ${gastosOpen ? THEME.tomato : THEME.olive}`,
+      marginBottom: 16
+    },
+    onClick: () => updateGastosOpen(!gastosOpen)
+  }, gastosOpen ? "🔒 Cerrar gastos" : "🔓 Abrir gastos") : !gastosOpen && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FBEAE4",
+      border: `1px solid ${THEME.tomato}`,
+      color: THEME.tomatoDark,
+      borderRadius: 10,
+      padding: "10px 12px",
+      fontSize: 13,
+      marginBottom: 16
+    }
+  }, "🔒 Gastos cerrados. Si quieres cambiar algo, habla con ", adminNames || "el Admin", "."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -1578,7 +1600,7 @@ function AccountsTab({
       marginBottom: 18
     }
   }, sorted.map(f => {
-    const canEdit = isAdmin || f.id === session.familyId;
+    const canEdit = isAdmin || gastosOpen && f.id === session.familyId;
     const editing = editingId === f.id;
     const spent = familySpent(f);
     return /*#__PURE__*/React.createElement("div", {
@@ -2043,7 +2065,8 @@ function App() {
             units: SEED_UNITS,
             childWeight: 0.5,
             adultAge: 13,
-            inscripcionOpen: true
+            inscripcionOpen: true,
+            gastosOpen: true
           };
           needsSave = true;
         } else {
@@ -2077,6 +2100,13 @@ function App() {
             d = {
               ...d,
               inscripcionOpen: true
+            };
+            needsSave = true;
+          }
+          if (d.gastosOpen === undefined) {
+            d = {
+              ...d,
+              gastosOpen: true
             };
             needsSave = true;
           }
@@ -2248,6 +2278,10 @@ function App() {
     }].sort((a, b) => b.year - a.year));
   };
   const removeYear = yearId => persistHistory(history.filter(h => h.id !== yearId));
+  const updateYearComment = (yearId, generalComment) => persistHistory(history.map(h => h.id === yearId ? {
+    ...h,
+    generalComment
+  } : h));
   const addCategory = (yearId, name) => {
     if (!name.trim()) return;
     persistHistory(history.map(h => h.id === yearId ? {
@@ -2325,17 +2359,19 @@ function App() {
     }].sort((a, b) => b.year - a.year);
     persistHistory(next);
   };
-  const saveYearResults = (year, categories) => {
+  const saveYearResults = (year, categories, generalComment) => {
     const y = parseInt(year, 10);
     if (!y) return;
     const existing = history.find(h => h.year === y);
     const next = existing ? history.map(h => h.year === y ? {
       ...h,
-      categories
+      categories,
+      generalComment: generalComment || ""
     } : h) : [...history, {
       id: uid("y"),
       year: y,
-      categories
+      categories,
+      generalComment: generalComment || ""
     }].sort((a, b) => b.year - a.year);
     persistHistory(next);
   };
@@ -2580,6 +2616,10 @@ function App() {
     ...data,
     inscripcionOpen: open
   });
+  const updateGastosOpen = open => persistData({
+    ...data,
+    gastosOpen: open
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -2792,6 +2832,7 @@ function App() {
     shoppingList: shoppingList,
     importCurrentListAsYear: importCurrentListAsYear,
     saveYearResults: saveYearResults,
+    updateYearComment: updateYearComment,
     readOnly: !perms.canManageHistory
   }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
     people: people,
@@ -2811,7 +2852,10 @@ function App() {
     session: effectiveSession,
     isAdmin: perms.isAdmin,
     history: history,
-    saveYearAccounts: saveYearAccounts
+    saveYearAccounts: saveYearAccounts,
+    gastosOpen: data.gastosOpen !== false,
+    updateGastosOpen: updateGastosOpen,
+    adminNames: adminNames
   }), tab === "admin" && perms.isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
     people: people,
     persistPeople: persistPeople,
@@ -3984,6 +4028,7 @@ function CloseYearModal({
     };
     return init;
   });
+  const [generalComment, setGeneralComment] = useState("");
   const setRow = (id, patch) => setRows(prev => ({
     ...prev,
     [id]: {
@@ -4009,7 +4054,7 @@ function CloseYearModal({
         };
       })
     }));
-    onSave(year, categories);
+    onSave(year, categories, generalComment);
     onClose();
   };
   return /*#__PURE__*/React.createElement("div", {
@@ -4069,7 +4114,26 @@ function CloseYearModal({
       padding: "6px 10px",
       margin: "0 0 12px"
     }
-  }, "⚠️ Ya hay datos guardados para ", year, ". Se sustituirán."), /*#__PURE__*/React.createElement("p", {
+  }, "⚠️ Ya hay datos guardados para ", year, ". Se sustituirán."), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      fontWeight: 600
+    }
+  }, "Comentario general del año (opcional)"), /*#__PURE__*/React.createElement("textarea", {
+    className: "paella-input",
+    rows: 3,
+    placeholder: "Ej. Faltó gas para la última hornada, el sitio nuevo funcionó bien…",
+    value: generalComment,
+    onChange: e => setGeneralComment(e.target.value),
+    style: {
+      width: "100%",
+      marginTop: 4,
+      marginBottom: 14,
+      fontFamily: "inherit",
+      resize: "vertical"
+    }
+  }), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12.5,
       color: THEME.inkSoft,
@@ -4243,6 +4307,7 @@ function HistoryTab({
   shoppingList,
   importCurrentListAsYear,
   saveYearResults,
+  updateYearComment,
   readOnly
 }) {
   const [openYear, setOpenYear] = useState(history && history.length ? history[0].id : null);
@@ -4338,7 +4403,31 @@ function HistoryTab({
       style: {
         padding: "10px 14px 14px"
       }
-    }, h.accounts && /*#__PURE__*/React.createElement("div", {
+    }, (h.generalComment || editMode) && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#FFF8E8",
+        border: `1px solid ${THEME.saffron}`,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 14,
+        fontSize: 13
+      }
+    }, editMode ? /*#__PURE__*/React.createElement("textarea", {
+      className: "paella-input",
+      rows: 2,
+      placeholder: "Comentario general del año…",
+      value: h.generalComment || "",
+      onChange: e => updateYearComment(h.id, e.target.value),
+      style: {
+        width: "100%",
+        fontFamily: "inherit",
+        resize: "vertical"
+      }
+    }) : /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontStyle: "italic"
+      }
+    }, "💬 ", h.generalComment)), h.accounts && /*#__PURE__*/React.createElement("div", {
       style: {
         background: THEME.borderSoft,
         borderRadius: 10,
