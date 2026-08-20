@@ -136,6 +136,11 @@ const SEED_SUPERMARKETS = [{
   id: "s3",
   name: "Especias La Bahía"
 }];
+const SEED_ACCESS = {
+  adminPin: "0000",
+  editorPin: "",
+  compradorPin: ""
+};
 const SEED_CATEGORIES = [{
   id: "c1",
   name: "Paellas"
@@ -911,6 +916,284 @@ function NoteBadge({
     }
   }, note);
 }
+function PinPad({
+  title,
+  onSubmit,
+  onBack
+}) {
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (!pin) return;
+    const ok = onSubmit(pin);
+    if (!ok) {
+      setErr(true);
+      setPin("");
+      setTimeout(() => setErr(false), 1200);
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 22,
+      maxWidth: 320,
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      margin: "0 0 12px",
+      fontSize: 17,
+      textAlign: "center"
+    }
+  }, title), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "tel",
+    inputMode: "numeric",
+    autoFocus: true,
+    placeholder: "PIN",
+    value: pin,
+    onChange: e => setPin(e.target.value.replace(/[^0-9]/g, "")),
+    onKeyDown: e => {
+      if (e.key === "Enter") submit();
+    },
+    style: {
+      textAlign: "center",
+      fontSize: 20,
+      letterSpacing: 4,
+      padding: "10px",
+      borderColor: err ? THEME.tomato : THEME.border
+    }
+  }), err && /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: THEME.tomatoDark,
+      fontSize: 12.5,
+      textAlign: "center",
+      margin: "8px 0 0"
+    }
+  }, "PIN incorrecto"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      flex: 1,
+      justifyContent: "center"
+    },
+    onClick: onBack
+  }, "Atrás"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      flex: 1,
+      justifyContent: "center"
+    },
+    onClick: submit
+  }, "Entrar")));
+}
+function RoleScreen({
+  access,
+  onLogin
+}) {
+  const [asking, setAsking] = useState(null);
+  const roles = [{
+    id: "editor",
+    label: "Editor",
+    icon: "✏️",
+    pin: access?.editorPin
+  }, {
+    id: "comprador",
+    label: "Comprador",
+    icon: "🛒",
+    pin: access?.compradorPin
+  }, {
+    id: "admin",
+    label: "Admin",
+    icon: "🔑",
+    pin: access?.adminPin
+  }];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.cream,
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'Inter', sans-serif",
+      color: THEME.ink,
+      padding: 20
+    }
+  }, asking ? /*#__PURE__*/React.createElement(PinPad, {
+    title: `Entrar como ${roles.find(r => r.id === asking).label}`,
+    onBack: () => setAsking(null),
+    onSubmit: pin => {
+      const role = roles.find(r => r.id === asking);
+      if (pin === role.pin) {
+        onLogin(asking, pin);
+        return true;
+      }
+      return false;
+    }
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 24,
+      maxWidth: 340,
+      width: "100%",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 30
+  }, "👨‍🍳"), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 22,
+      margin: "8px 0 4px"
+    }
+  }, "La lista de la paella"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      margin: "0 0 20px"
+    }
+  }, "¿Cómo quieres entrar?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      justifyContent: "center",
+      padding: "10px"
+    },
+    onClick: () => onLogin("general")
+  }, "👤 General (sin PIN)"), roles.map(r => /*#__PURE__*/React.createElement("button", {
+    key: r.id,
+    className: "tab-btn",
+    disabled: !r.pin,
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      justifyContent: "center",
+      padding: "10px",
+      opacity: r.pin ? 1 : 0.45
+    },
+    onClick: () => r.pin && setAsking(r.id)
+  }, r.icon, " ", r.label, !r.pin && " (sin configurar)")))));
+}
+function AdminTab({
+  access,
+  persistAccess
+}) {
+  const [adminPin, setAdminPin] = useState(access.adminPin || "");
+  const [editorPin, setEditorPin] = useState(access.editorPin || "");
+  const [compradorPin, setCompradorPin] = useState(access.compradorPin || "");
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    if (!adminPin.trim()) return;
+    persistAccess({
+      adminPin: adminPin.trim(),
+      editorPin: editorPin.trim(),
+      compradorPin: compradorPin.trim()
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "Aquí defines el PIN de cada rol. Déjalo vacío para desactivar ese acceso (nadie podrá entrar con ese rol)."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 600
+    }
+  }, "🔑 PIN de Admin (obligatorio)"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "tel",
+    inputMode: "numeric",
+    value: adminPin,
+    onChange: e => setAdminPin(e.target.value.replace(/[^0-9]/g, "")),
+    style: {
+      marginTop: 4
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 600
+    }
+  }, "✏️ PIN de Editor"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "tel",
+    inputMode: "numeric",
+    value: editorPin,
+    onChange: e => setEditorPin(e.target.value.replace(/[^0-9]/g, "")),
+    style: {
+      marginTop: 4
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 600
+    }
+  }, "🛒 PIN de Comprador"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "tel",
+    inputMode: "numeric",
+    value: compradorPin,
+    onChange: e => setCompradorPin(e.target.value.replace(/[^0-9]/g, "")),
+    style: {
+      marginTop: 4
+    }
+  }))), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      width: "100%",
+      justifyContent: "center",
+      marginTop: 18,
+      padding: "10px"
+    },
+    onClick: save
+  }, "Guardar PINes"), saved && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.oliveDark,
+      textAlign: "center",
+      marginTop: 8
+    }
+  }, "✓ Guardado"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 24,
+      padding: 12,
+      background: THEME.borderSoft,
+      borderRadius: 10,
+      fontSize: 12,
+      color: THEME.inkSoft
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "Recuerda:"), " Editor edita Ingredientes y Opciones. Comprador solo marca lo comprado en la Lista de la compra. General solo puede ver. Admin lo ve y edita todo."));
+}
 function migrateData(d) {
   if (!d) return d;
   if (d.categories) return d;
@@ -949,6 +1232,9 @@ function App() {
   const [data, setData] = useState(null);
   const [shoppingList, setShoppingList] = useState(null);
   const [history, setHistory] = useState(null);
+  const [access, setAccess] = useState(null);
+  const [role, setRole] = useState(null);
+  const [roleChecked, setRoleChecked] = useState(false);
   const [tab, setTab] = useState("shopping");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -982,10 +1268,21 @@ function App() {
           h = SEED_HISTORY;
           await storage.set("paella-history", h);
         }
+        let a = await storage.get("paella-access");
+        if (!a) {
+          a = SEED_ACCESS;
+          await storage.set("paella-access", a);
+        }
         if (!cancelled) {
           setData(d);
           setShoppingList(sl);
           setHistory(h);
+          setAccess(a);
+          try {
+            const saved = JSON.parse(localStorage.getItem("paella_role_v1") || "null");
+            if (saved && saved.role === "general") setRole("general");else if (saved && saved.role === "editor" && saved.pin === a.editorPin && a.editorPin) setRole("editor");else if (saved && saved.role === "comprador" && saved.pin === a.compradorPin && a.compradorPin) setRole("comprador");else if (saved && saved.role === "admin" && saved.pin === a.adminPin && a.adminPin) setRole("admin");
+          } catch (e) {/* ignore */}
+          setRoleChecked(true);
           setLoading(false);
         }
       } catch (e) {
@@ -1000,6 +1297,33 @@ function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+  const login = (roleName, pin) => {
+    setRole(roleName);
+    try {
+      localStorage.setItem("paella_role_v1", JSON.stringify({
+        role: roleName,
+        pin: pin || ""
+      }));
+    } catch (e) {/* ignore */}
+  };
+  const logout = () => {
+    setRole(null);
+    try {
+      localStorage.removeItem("paella_role_v1");
+    } catch (e) {/* ignore */}
+  };
+  const persistAccess = useCallback(async next => {
+    setAccess(next);
+    try {
+      setSavingNote("Guardando…");
+      await storage.set("paella-access", next);
+      setSavingNote("Guardado");
+      setTimeout(() => setSavingNote(""), 900);
+    } catch {
+      setError("No se ha podido guardar el acceso.");
+      setTimeout(() => setError(""), 2500);
+    }
   }, []);
   const persistData = useCallback(async next => {
     setData(next);
@@ -1118,6 +1442,20 @@ function App() {
       id: uid("y"),
       year: y,
       categories: [cat]
+    }].sort((a, b) => b.year - a.year);
+    persistHistory(next);
+  };
+  const saveYearResults = (year, categories) => {
+    const y = parseInt(year, 10);
+    if (!y) return;
+    const existing = history.find(h => h.year === y);
+    const next = existing ? history.map(h => h.year === y ? {
+      ...h,
+      categories
+    } : h) : [...history, {
+      id: uid("y"),
+      year: y,
+      categories
     }].sort((a, b) => b.year - a.year);
     persistHistory(next);
   };
@@ -1277,6 +1615,25 @@ function App() {
       color: THEME.inkSoft
     }
   }, "Cargando la lista…");
+  if (!role) {
+    return /*#__PURE__*/React.createElement(RoleScreen, {
+      access: access,
+      onLogin: login
+    });
+  }
+  const perms = {
+    canManageIngredients: role === "admin" || role === "editor",
+    canManageOptions: role === "admin" || role === "editor",
+    canToggleShopping: role === "admin" || role === "comprador",
+    canManageHistory: role === "admin",
+    isAdmin: role === "admin"
+  };
+  const roleLabel = {
+    admin: "Admin",
+    editor: "Editor",
+    comprador: "Comprador",
+    general: "General"
+  }[role] || role;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -1294,6 +1651,13 @@ function App() {
     style: {
       display: "flex",
       alignItems: "center",
+      gap: 10,
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
       gap: 10
     }
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -1305,7 +1669,18 @@ function App() {
       fontSize: 28,
       margin: 0
     }
-  }, "La lista de la paella")), /*#__PURE__*/React.createElement("p", {
+  }, "La lista de la paella")), /*#__PURE__*/React.createElement("button", {
+    onClick: logout,
+    style: {
+      background: "none",
+      border: "none",
+      fontSize: 11.5,
+      color: THEME.inkSoft,
+      cursor: "pointer",
+      textDecoration: "underline",
+      padding: 0
+    }
+  }, roleLabel, " · cambiar")), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: "6px 0 0",
       color: THEME.inkSoft,
@@ -1371,7 +1746,17 @@ function App() {
       border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
     },
     onClick: () => setTab("history")
-  }, "Historial")), /*#__PURE__*/React.createElement("main", {
+  }, "Historial"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "admin" ? THEME.tomato : "#fff",
+      color: tab === "admin" ? "#fff" : THEME.tomatoDark,
+      border: `1px solid ${tab === "admin" ? THEME.tomato : THEME.border}`
+    },
+    onClick: () => setTab("admin")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "🔑"), " Admin")), /*#__PURE__*/React.createElement("main", {
     style: {
       maxWidth: 720,
       margin: "0 auto",
@@ -1384,7 +1769,8 @@ function App() {
     removeIngredient: removeIngredient,
     moveIngredient: moveIngredient,
     onGenerate: requestGenerate,
-    history: history
+    history: history,
+    readOnly: !perms.canManageIngredients
   }), tab === "options" && /*#__PURE__*/React.createElement(OptionsTab, {
     supermarkets: data.supermarkets,
     addSupermarket: addSupermarket,
@@ -1394,7 +1780,8 @@ function App() {
     addIngredientCategory: addIngredientCategory,
     removeIngredientCategory: removeIngredientCategory,
     renameIngredientCategory: renameIngredientCategory,
-    moveIngredientCategory: moveIngredientCategory
+    moveIngredientCategory: moveIngredientCategory,
+    readOnly: !perms.canManageOptions
   }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
     shoppingList: shoppingList,
     grouped: grouped,
@@ -1402,7 +1789,9 @@ function App() {
     toggleCheck: toggleCheck,
     onGenerate: requestGenerate,
     setLightboxUrl: setLightboxUrl,
-    moveShoppingItem: moveShoppingItem
+    moveShoppingItem: moveShoppingItem,
+    canToggle: perms.canToggleShopping,
+    canManage: perms.canManageIngredients
   }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
     history: history,
     addYear: addYear,
@@ -1414,7 +1803,12 @@ function App() {
     updateItem: updateItem,
     removeItem: removeItem,
     shoppingList: shoppingList,
-    importCurrentListAsYear: importCurrentListAsYear
+    importCurrentListAsYear: importCurrentListAsYear,
+    saveYearResults: saveYearResults,
+    readOnly: !perms.canManageHistory
+  }), tab === "admin" && perms.isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
+    access: access,
+    persistAccess: persistAccess
   })), savingNote && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -1643,7 +2037,8 @@ function IngredientsTab({
   removeIngredient,
   moveIngredient,
   onGenerate,
-  history
+  history,
+  readOnly
 }) {
   const categories = data.categories || [];
   const groups = useMemo(() => {
@@ -1719,8 +2114,9 @@ function IngredientsTab({
       onMoveUp: () => moveIngredient(ing.id, -1),
       onMoveDown: () => moveIngredient(ing.id, 1),
       isFirst: i === 0,
-      isLast: i === items.length - 1
-    })), /*#__PURE__*/React.createElement("button", {
+      isLast: i === items.length - 1,
+      readOnly: readOnly
+    })), !readOnly && /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
         background: "#fff",
@@ -1733,7 +2129,7 @@ function IngredientsTab({
     }, /*#__PURE__*/React.createElement(Icon, {
       size: 13
     }, "➕"), " Añadir a \"", label, "\"")));
-  }), /*#__PURE__*/React.createElement("button", {
+  }), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: "#fff",
@@ -1744,7 +2140,7 @@ function IngredientsTab({
       justifyContent: "center"
     },
     onClick: () => addIngredient("")
-  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ingrediente nuevo"), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ingrediente nuevo"), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: THEME.saffron,
@@ -1806,7 +2202,8 @@ function IngredientRow({
   onMoveUp,
   onMoveDown,
   isFirst,
-  isLast
+  isLast,
+  readOnly
 }) {
   const [expanded, setExpanded] = useState(false);
   const categories = data.categories || [];
@@ -1823,7 +2220,7 @@ function IngredientRow({
       alignItems: "center",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement(OrderArrows, {
+  }, !readOnly && /*#__PURE__*/React.createElement(OrderArrows, {
     onUp: onMoveUp,
     onDown: onMoveDown,
     isFirst: isFirst,
@@ -1835,6 +2232,7 @@ function IngredientRow({
     className: "paella-input",
     placeholder: "Nombre del ingrediente",
     value: ing.name,
+    disabled: readOnly,
     onChange: e => updateIngredient(ing.id, {
       name: e.target.value
     }),
@@ -1868,6 +2266,7 @@ function IngredientRow({
     className: "paella-input",
     type: "number",
     step: "0.1",
+    disabled: readOnly,
     value: ing.normalQty,
     onChange: e => updateIngredient(ing.id, {
       normalQty: e.target.value === "" ? "" : parseFloat(e.target.value)
@@ -1893,6 +2292,7 @@ function IngredientRow({
     className: "paella-input",
     type: "number",
     step: "0.1",
+    disabled: readOnly,
     value: ing.currentQty,
     onChange: e => updateIngredient(ing.id, {
       currentQty: e.target.value === "" ? "" : parseFloat(e.target.value)
@@ -1924,7 +2324,7 @@ function IngredientRow({
     title: "Historial"
   }, /*#__PURE__*/React.createElement(Icon, {
     size: 16
-  }, "🕘")), /*#__PURE__*/React.createElement("button", {
+  }, "🕘")), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => removeIngredient(ing.id),
     title: "Eliminar"
@@ -1939,6 +2339,7 @@ function IngredientRow({
     }
   }, /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
+    disabled: readOnly,
     value: ing.categoryId || "",
     onChange: e => updateIngredient(ing.id, {
       categoryId: e.target.value
@@ -1950,6 +2351,7 @@ function IngredientRow({
     value: c.id
   }, c.name))), /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
+    disabled: readOnly,
     value: ing.supermarketId,
     onChange: e => updateIngredient(ing.id, {
       supermarketId: e.target.value
@@ -1962,6 +2364,7 @@ function IngredientRow({
   }, s.name))), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
     placeholder: "Unidad (kg, l…)",
+    disabled: readOnly,
     value: ing.unit,
     onChange: e => updateIngredient(ing.id, {
       unit: e.target.value
@@ -1969,6 +2372,7 @@ function IngredientRow({
   }), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
     placeholder: "URL de imagen",
+    disabled: readOnly,
     value: ing.imageUrl,
     onChange: e => updateIngredient(ing.id, {
       imageUrl: e.target.value
@@ -1984,7 +2388,8 @@ function OptionsTab({
   addIngredientCategory,
   removeIngredientCategory,
   renameIngredientCategory,
-  moveIngredientCategory
+  moveIngredientCategory,
+  readOnly
 }) {
   const [newMarket, setNewMarket] = useState("");
   const [newCat, setNewCat] = useState("");
@@ -2018,23 +2423,24 @@ function OptionsTab({
       borderRadius: 10,
       padding: "8px 10px"
     }
-  }, /*#__PURE__*/React.createElement(OrderArrows, {
+  }, !readOnly && /*#__PURE__*/React.createElement(OrderArrows, {
     onUp: () => moveIngredientCategory(c.id, -1),
     onDown: () => moveIngredientCategory(c.id, 1),
     isFirst: i === 0,
     isLast: i === categories.length - 1
   }), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
+    disabled: readOnly,
     style: {
       border: "none",
       padding: "2px 4px"
     },
     value: c.name,
     onChange: e => renameIngredientCategory(c.id, e.target.value)
-  }), /*#__PURE__*/React.createElement("button", {
+  }), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => removeIngredientCategory(c.id)
-  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))))), !readOnly && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -2096,16 +2502,17 @@ function OptionsTab({
     size: 15
   }, "🏪"), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
+    disabled: readOnly,
     style: {
       border: "none",
       padding: "2px 4px"
     },
     value: s.name,
     onChange: e => renameSupermarket(s.id, e.target.value)
-  }), /*#__PURE__*/React.createElement("button", {
+  }), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => removeSupermarket(s.id)
-  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))))), !readOnly && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -2214,7 +2621,9 @@ function ShoppingTab({
   toggleCheck,
   onGenerate,
   setLightboxUrl,
-  moveShoppingItem
+  moveShoppingItem,
+  canToggle,
+  canManage
 }) {
   const [openItem, setOpenItem] = useState(null);
   if (!shoppingList || shoppingList.items.length === 0) {
@@ -2239,7 +2648,7 @@ function ShoppingTab({
         color: THEME.inkSoft,
         margin: "0 0 18px"
       }
-    }, "Ajusta las cantidades en Ingredientes y pulsa el botón para generar lo que hay que comprar este año."), /*#__PURE__*/React.createElement("button", {
+    }, canManage ? "Ajusta las cantidades en Ingredientes y pulsa el botón para generar lo que hay que comprar este año." : "Todavía no se ha generado la lista de este año."), canManage && /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
         background: THEME.saffron,
@@ -2266,7 +2675,7 @@ function ShoppingTab({
     pct: progress.pct,
     done: progress.done,
     total: progress.total
-  }), /*#__PURE__*/React.createElement("button", {
+  }), canManage && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: "#fff",
@@ -2313,7 +2722,7 @@ function ShoppingTab({
         cursor: "pointer"
       },
       onClick: () => setOpenItem(open ? null : it.id)
-    }, /*#__PURE__*/React.createElement("span", {
+    }, canManage && /*#__PURE__*/React.createElement("span", {
       onClick: e => e.stopPropagation()
     }, /*#__PURE__*/React.createElement(OrderArrows, {
       onUp: () => moveShoppingItem(it.id, -1),
@@ -2322,8 +2731,10 @@ function ShoppingTab({
       isLast: i === items.length - 1
     })), /*#__PURE__*/React.createElement("span", {
       onClick: e => {
-        e.stopPropagation();
-        toggleCheck(it.id);
+        if (canToggle) {
+          e.stopPropagation();
+          toggleCheck(it.id);
+        }
       },
       style: {
         width: 20,
@@ -2386,6 +2797,210 @@ function ShoppingTab({
     }, it.supermarketName))));
   })))));
 }
+function CloseYearModal({
+  shoppingList,
+  history,
+  onSave,
+  onClose
+}) {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(String(currentYear));
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const it of shoppingList.items) {
+      const key = it.categoryName || "Sin categoría";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(it);
+    }
+    return Array.from(map.entries());
+  }, [shoppingList]);
+  const [rows, setRows] = useState(() => {
+    const init = {};
+    for (const it of shoppingList.items) init[it.id] = {
+      qty: `${fmtQty(it.qty)} ${it.unit}`.trim(),
+      result: ""
+    };
+    return init;
+  });
+  const setRow = (id, patch) => setRows(prev => ({
+    ...prev,
+    [id]: {
+      ...prev[id],
+      ...patch
+    }
+  }));
+  const existingYear = history.find(h => h.year === parseInt(year, 10));
+  const willReplace = existingYear && existingYear.categories.length > 0;
+  const handleSave = () => {
+    const categories = grouped.map(([catName, items]) => ({
+      id: uid("c"),
+      name: catName,
+      note: "",
+      items: items.map(it => ({
+        id: uid("hi"),
+        name: it.name,
+        qty: rows[it.id]?.qty || "",
+        note: rows[it.id]?.result || ""
+      }))
+    }));
+    onSave(year, categories);
+    onClose();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44,34,22,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+      zIndex: 50
+    },
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 18,
+      maxWidth: 480,
+      width: "100%",
+      maxHeight: "85vh",
+      overflowY: "auto"
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      margin: "0 0 6px",
+      fontSize: 18
+    }
+  }, "Registrar resultados del año"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft
+    }
+  }, "Año:"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    style: {
+      maxWidth: 100
+    },
+    value: year,
+    onChange: e => setYear(e.target.value)
+  })), willReplace && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.tomatoDark,
+      background: "#FBEAE4",
+      borderRadius: 8,
+      padding: "6px 10px",
+      margin: "0 0 12px"
+    }
+  }, "⚠️ Ya hay datos guardados para ", year, ". Se sustituirán."), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      margin: "0 0 12px"
+    }
+  }, "Toca \"Sobró\", \"Justo\" o \"Faltó\" en cada cosa. Puedes ajustar la cantidad final si hace falta."), grouped.map(([catName, items]) => /*#__PURE__*/React.createElement("div", {
+    key: catName,
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 14,
+      margin: "0 0 6px",
+      color: THEME.saffronDark
+    }
+  }, catName), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, items.map(it => /*#__PURE__*/React.createElement("div", {
+    key: it.id,
+    style: {
+      border: `1px solid ${THEME.borderSoft}`,
+      borderRadius: 8,
+      padding: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, it.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      alignItems: "center",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    style: {
+      flex: 1,
+      minWidth: 90,
+      fontSize: 12.5,
+      padding: "4px 6px"
+    },
+    value: rows[it.id]?.qty || "",
+    onChange: e => setRow(it.id, {
+      qty: e.target.value
+    })
+  }), ["Sobró", "Justo", "Faltó"].map(opt => {
+    const active = rows[it.id]?.result === opt;
+    const activeBg = opt === "Sobró" ? THEME.olive : opt === "Faltó" ? THEME.tomato : THEME.borderSoft;
+    const activeColor = opt === "Justo" ? THEME.ink : "#fff";
+    return /*#__PURE__*/React.createElement("button", {
+      key: opt,
+      type: "button",
+      className: "tab-btn",
+      style: {
+        fontSize: 12,
+        padding: "4px 10px",
+        background: active ? activeBg : "#fff",
+        color: active ? activeColor : THEME.inkSoft,
+        border: `1px solid ${THEME.border}`
+      },
+      onClick: () => setRow(it.id, {
+        result: active ? "" : opt
+      })
+    }, opt);
+  }))))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      justifyContent: "flex-end",
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: onClose
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff"
+    },
+    onClick: handleSave
+  }, "Guardar en Historial"))));
+}
 function HistoryTab({
   history,
   addYear,
@@ -2397,11 +3012,14 @@ function HistoryTab({
   updateItem,
   removeItem,
   shoppingList,
-  importCurrentListAsYear
+  importCurrentListAsYear,
+  saveYearResults,
+  readOnly
 }) {
   const [openYear, setOpenYear] = useState(history && history.length ? history[0].id : null);
   const [newYear, setNewYear] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [closeYearOpen, setCloseYearOpen] = useState(false);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -2419,7 +3037,7 @@ function HistoryTab({
       flex: 1,
       minWidth: 200
     }
-  }, "Lo que se compró cada año y qué sobró o faltó."), /*#__PURE__*/React.createElement("button", {
+  }, "Lo que se compró cada año y qué sobró o faltó."), !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: editMode ? THEME.olive : "#fff",
@@ -2427,7 +3045,18 @@ function HistoryTab({
       border: `1px solid ${THEME.border}`
     },
     onClick: () => setEditMode(e => !e)
-  }, "✏️ ", editMode ? "Listo" : "Editar")), history.length === 0 && /*#__PURE__*/React.createElement("p", {
+  }, "✏️ ", editMode ? "Listo" : "Editar")), !readOnly && shoppingList && shoppingList.items.length > 0 && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      width: "100%",
+      justifyContent: "center",
+      marginBottom: 16,
+      padding: "10px 14px"
+    },
+    onClick: () => setCloseYearOpen(true)
+  }, /*#__PURE__*/React.createElement(Icon, null, "📋"), " Registrar resultados de este año"), history.length === 0 && /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 14,
       color: THEME.inkSoft
@@ -2651,7 +3280,12 @@ function HistoryTab({
     }
   }, "También puedes guardar la lista de la compra actual como registro de un año."), /*#__PURE__*/React.createElement(ImportYearRow, {
     onImport: importCurrentListAsYear
-  })));
+  })), closeYearOpen && /*#__PURE__*/React.createElement(CloseYearModal, {
+    shoppingList: shoppingList,
+    history: history,
+    onSave: saveYearResults,
+    onClose: () => setCloseYearOpen(false)
+  }));
 }
 function ImportYearRow({
   onImport
