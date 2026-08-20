@@ -136,11 +136,23 @@ const SEED_SUPERMARKETS = [{
   id: "s3",
   name: "Especias La Bahía"
 }];
-const SEED_ACCESS = {
-  adminPin: "0000",
-  editorPin: "",
-  compradorPin: ""
-};
+const SEED_PEOPLE = [{
+  id: "fam1",
+  lastName: "Admin",
+  person1: {
+    name: "Admin",
+    pin: "0000",
+    role: "admin"
+  },
+  person2: {
+    name: "",
+    pin: "",
+    role: ""
+  },
+  adults: 0,
+  kids: 0,
+  spent: 0
+}];
 const SEED_CATEGORIES = [{
   id: "c1",
   name: "Paellas"
@@ -998,27 +1010,12 @@ function PinPad({
     onClick: submit
   }, "Entrar")));
 }
-function RoleScreen({
-  access,
-  onLogin
+function PersonLoginScreen({
+  families,
+  adminNames,
+  attemptLogin
 }) {
-  const [asking, setAsking] = useState(null);
-  const roles = [{
-    id: "editor",
-    label: "Editor",
-    icon: "✏️",
-    pin: access?.editorPin
-  }, {
-    id: "comprador",
-    label: "Comprador",
-    icon: "🛒",
-    pin: access?.compradorPin
-  }, {
-    id: "admin",
-    label: "Admin",
-    icon: "🔑",
-    pin: access?.adminPin
-  }];
+  const [selected, setSelected] = useState(null);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -1030,23 +1027,16 @@ function RoleScreen({
       color: THEME.ink,
       padding: 20
     }
-  }, asking ? /*#__PURE__*/React.createElement(PinPad, {
-    title: `Entrar como ${roles.find(r => r.id === asking).label}`,
-    onBack: () => setAsking(null),
-    onSubmit: pin => {
-      const role = roles.find(r => r.id === asking);
-      if (pin === role.pin) {
-        onLogin(asking, pin);
-        return true;
-      }
-      return false;
-    }
+  }, selected ? /*#__PURE__*/React.createElement(PinPad, {
+    title: selected.isNew ? "Crea tu PIN" : "Introduce tu PIN",
+    onBack: () => setSelected(null),
+    onSubmit: pin => attemptLogin(selected.familyId, selected.personKey, pin, selected.isNew)
   }) : /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       borderRadius: 14,
-      padding: 24,
-      maxWidth: 340,
+      padding: 22,
+      maxWidth: 420,
       width: "100%",
       textAlign: "center"
     }
@@ -1055,144 +1045,513 @@ function RoleScreen({
   }, "👨‍🍳"), /*#__PURE__*/React.createElement("h1", {
     style: {
       fontFamily: "'Fraunces', serif",
-      fontSize: 22,
+      fontSize: 21,
       margin: "8px 0 4px"
     }
   }, "La lista de la paella"), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
-      margin: "0 0 20px"
+      margin: "0 0 16px"
     }
-  }, "¿Cómo quieres entrar?"), /*#__PURE__*/React.createElement("div", {
+  }, "Toca tu nombre para entrar"), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
+      overflowX: "auto"
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
+  }, /*#__PURE__*/React.createElement("table", {
     style: {
-      background: THEME.saffron,
-      color: "#fff",
-      justifyContent: "center",
-      padding: "10px"
-    },
-    onClick: () => onLogin("general")
-  }, "👤 General (sin PIN)"), roles.map(r => /*#__PURE__*/React.createElement("button", {
-    key: r.id,
+      width: "100%",
+      borderCollapse: "collapse",
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      borderBottom: `1px solid ${THEME.border}`
+    }
+  }, /*#__PURE__*/React.createElement("th", {
+    style: {
+      padding: "4px 6px",
+      textAlign: "left",
+      color: THEME.inkSoft,
+      fontWeight: 600
+    }
+  }, "Apellido"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      padding: "4px 6px",
+      color: THEME.inkSoft,
+      fontWeight: 600
+    }
+  }, "Nombre 1"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      padding: "4px 6px",
+      color: THEME.inkSoft,
+      fontWeight: 600
+    }
+  }, "Nombre 2"))), /*#__PURE__*/React.createElement("tbody", null, families.map(f => /*#__PURE__*/React.createElement("tr", {
+    key: f.id,
+    style: {
+      borderBottom: `1px solid ${THEME.borderSoft}`
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "6px",
+      textAlign: "left",
+      fontWeight: 600
+    }
+  }, f.lastName || "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "6px",
+      textAlign: "center"
+    }
+  }, f.person1.name ? /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
-    disabled: !r.pin,
     style: {
       background: "#fff",
       border: `1px solid ${THEME.border}`,
-      justifyContent: "center",
-      padding: "10px",
-      opacity: r.pin ? 1 : 0.45
+      fontSize: 12.5,
+      padding: "5px 8px"
     },
-    onClick: () => r.pin && setAsking(r.id)
-  }, r.icon, " ", r.label, !r.pin && " (sin configurar)")))));
+    onClick: () => setSelected({
+      familyId: f.id,
+      personKey: "person1",
+      isNew: !f.person1.pin
+    })
+  }, f.person1.name) : "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "6px",
+      textAlign: "center"
+    }
+  }, f.person2.name ? /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      fontSize: 12.5,
+      padding: "5px 8px"
+    },
+    onClick: () => setSelected({
+      familyId: f.id,
+      personKey: "person2",
+      isNew: !f.person2.pin
+    })
+  }, f.person2.name) : "—")))))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft,
+      marginTop: 16
+    }
+  }, "Si no apareces en la lista, pide a ", adminNames || "el Admin", " que te añada.")));
 }
-function AdminTab({
-  access,
-  persistAccess
+const ROLE_OPTIONS = [{
+  value: "",
+  label: "General"
+}, {
+  value: "comprador",
+  label: "Comprador"
+}, {
+  value: "editor",
+  label: "Editor"
+}, {
+  value: "admin",
+  label: "Admin"
+}];
+function PersonFields({
+  person,
+  onChange,
+  onResetPin
 }) {
-  const [adminPin, setAdminPin] = useState(access.adminPin || "");
-  const [editorPin, setEditorPin] = useState(access.editorPin || "");
-  const [compradorPin, setCompradorPin] = useState(access.compradorPin || "");
-  const [saved, setSaved] = useState(false);
-  const save = () => {
-    if (!adminPin.trim()) return;
-    persistAccess({
-      adminPin: adminPin.trim(),
-      editorPin: editorPin.trim(),
-      compradorPin: compradorPin.trim()
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nombre",
+    value: person.name,
+    onChange: e => onChange({
+      ...person,
+      name: e.target.value
+    }),
+    style: {
+      fontSize: 13
+    }
+  }), /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: person.role || "",
+    onChange: e => onChange({
+      ...person,
+      role: e.target.value
+    }),
+    style: {
+      fontSize: 13
+    }
+  }, ROLE_OPTIONS.map(r => /*#__PURE__*/React.createElement("option", {
+    key: r.value,
+    value: r.value
+  }, r.label))), person.name && (person.pin ? /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 11,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      padding: "3px 6px"
+    },
+    onClick: onResetPin
+  }, "Resetear PIN") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: THEME.inkSoft
+    }
+  }, "Sin PIN todavía")));
+}
+function computeSettlements(balances) {
+  const creditors = balances.filter(b => b.balance > 0.005).map(b => ({
+    ...b
+  })).sort((a, b) => b.balance - a.balance);
+  const debtors = balances.filter(b => b.balance < -0.005).map(b => ({
+    ...b,
+    balance: -b.balance
+  })).sort((a, b) => b.balance - a.balance);
+  const transfers = [];
+  let i = 0,
+    j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const amount = Math.min(debtors[i].balance, creditors[j].balance);
+    if (amount > 0.005) transfers.push({
+      from: debtors[i].name,
+      to: creditors[j].name,
+      amount
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
+    debtors[i].balance -= amount;
+    creditors[j].balance -= amount;
+    if (debtors[i].balance <= 0.005) i++;
+    if (creditors[j].balance <= 0.005) j++;
+  }
+  return transfers;
+}
+function AccountsTab({
+  people,
+  persistPeople,
+  childWeight,
+  session,
+  isAdmin
+}) {
+  const [editingId, setEditingId] = useState(null);
+  const totals = useMemo(() => {
+    const totalSpent = people.reduce((s, f) => s + (Number(f.spent) || 0), 0);
+    const totalWeighted = people.reduce((s, f) => s + (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight, 0);
+    const costPerUnit = totalWeighted > 0 ? totalSpent / totalWeighted : 0;
+    const balances = people.map(f => {
+      const weighted = (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight;
+      const shouldPay = weighted * costPerUnit;
+      const balance = (Number(f.spent) || 0) - shouldPay;
+      return {
+        id: f.id,
+        name: f.lastName || "(sin apellido)",
+        balance,
+        weighted,
+        shouldPay
+      };
+    });
+    return {
+      totalSpent,
+      totalWeighted,
+      costPerUnit,
+      balances
+    };
+  }, [people, childWeight]);
+  const transfers = useMemo(() => computeSettlements(totals.balances), [totals.balances]);
+  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
+    ...f,
+    ...patch
+  } : f));
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Aquí defines el PIN de cada rol. Déjalo vacío para desactivar ese acceso (nadie podrá entrar con ese rol)."), /*#__PURE__*/React.createElement("div", {
+  }, "Cada familia indica cuántos vienen y cuánto ha ido pagando. El reparto se calcula solo."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 14
+      gap: 8,
+      marginBottom: 18
     }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  }, people.map(f => {
+    const bal = totals.balances.find(b => b.id === f.id);
+    const canEdit = isAdmin || f.id === session.familyId;
+    const editing = editingId === f.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      style: {
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontFamily: "'Fraunces', serif"
+      }
+    }, f.lastName || "(sin apellido)"), canEdit && /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        fontSize: 11.5,
+        background: "#fff",
+        border: `1px solid ${THEME.border}`,
+        padding: "3px 8px"
+      },
+      onClick: () => setEditingId(editing ? null : f.id)
+    }, editing ? "Listo" : "Editar")), editing ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 6,
+        marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10.5,
+        color: THEME.inkSoft
+      }
+    }, "Adultos"), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      type: "number",
+      min: "0",
+      value: f.adults,
+      onChange: e => updateFamily(f.id, {
+        adults: e.target.value === "" ? 0 : parseInt(e.target.value, 10)
+      }),
+      style: {
+        textAlign: "center",
+        padding: "5px"
+      }
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10.5,
+        color: THEME.inkSoft
+      }
+    }, "Niños"), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      type: "number",
+      min: "0",
+      value: f.kids,
+      onChange: e => updateFamily(f.id, {
+        kids: e.target.value === "" ? 0 : parseInt(e.target.value, 10)
+      }),
+      style: {
+        textAlign: "center",
+        padding: "5px"
+      }
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10.5,
+        color: THEME.inkSoft
+      }
+    }, "Gastado (€)"), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      type: "number",
+      min: "0",
+      step: "0.5",
+      value: f.spent,
+      onChange: e => updateFamily(f.id, {
+        spent: e.target.value === "" ? 0 : parseFloat(e.target.value)
+      }),
+      style: {
+        textAlign: "center",
+        padding: "5px"
+      }
+    }))) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 14,
+        marginTop: 6,
+        fontSize: 12.5,
+        color: THEME.inkSoft,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "👥 ", f.adults || 0, " adultos, ", f.kids || 0, " niños"), /*#__PURE__*/React.createElement("span", null, "💶 Pagado: ", (f.spent || 0).toFixed(2), " €")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 6,
+        fontSize: 13,
+        fontWeight: 600,
+        color: bal.balance > 0.005 ? THEME.oliveDark : bal.balance < -0.005 ? THEME.tomatoDark : THEME.inkSoft
+      }
+    }, bal.balance > 0.005 ? `Le deben ${bal.balance.toFixed(2)} €` : bal.balance < -0.005 ? `Debe ${Math.abs(bal.balance).toFixed(2)} €` : "Al día"));
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12.5,
+      background: THEME.borderSoft,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 18,
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, totals.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerUnit.toFixed(2), " €"))), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      margin: "0 0 8px"
+    }
+  }, "Quién paga a quién"), transfers.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      color: THEME.inkSoft
+    }
+  }, "Todo el mundo está al día.") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, transfers.map((t, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: "9px 12px",
+      fontSize: 14
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
       fontWeight: 600
     }
-  }, "🔑 PIN de Admin (obligatorio)"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "tel",
-    inputMode: "numeric",
-    value: adminPin,
-    onChange: e => setAdminPin(e.target.value.replace(/[^0-9]/g, "")),
+  }, t.from), /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "→"), /*#__PURE__*/React.createElement("span", {
     style: {
-      marginTop: 4
-    }
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    style: {
-      fontSize: 12.5,
       fontWeight: 600
     }
-  }, "✏️ PIN de Editor"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "tel",
-    inputMode: "numeric",
-    value: editorPin,
-    onChange: e => setEditorPin(e.target.value.replace(/[^0-9]/g, "")),
+  }, t.to), /*#__PURE__*/React.createElement("span", {
     style: {
-      marginTop: 4
+      marginLeft: "auto",
+      fontWeight: 700,
+      color: THEME.tomatoDark
     }
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  }, t.amount.toFixed(2), " €")))));
+}
+function AdminTab({
+  people,
+  persistPeople
+}) {
+  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
+    ...f,
+    ...patch
+  } : f));
+  const removeFamily = id => persistPeople(people.filter(f => f.id !== id));
+  const addFamily = () => persistPeople([...people, {
+    id: uid("fam"),
+    lastName: "",
+    person1: {
+      name: "",
+      pin: "",
+      role: ""
+    },
+    person2: {
+      name: "",
+      pin: "",
+      role: ""
+    },
+    adults: 0,
+    kids: 0,
+    spent: 0
+  }]);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
-      fontSize: 12.5,
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "Gestiona las familias: nombres, roles, y resetea PINes si alguien lo olvida."), people.map(f => /*#__PURE__*/React.createElement("div", {
+    key: f.id,
+    style: {
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 10,
+      background: THEME.card
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      alignItems: "center",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Apellido",
+    value: f.lastName,
+    onChange: e => updateFamily(f.id, {
+      lastName: e.target.value
+    }),
+    style: {
       fontWeight: 600
     }
-  }, "🛒 PIN de Comprador"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "tel",
-    inputMode: "numeric",
-    value: compradorPin,
-    onChange: e => setCompradorPin(e.target.value.replace(/[^0-9]/g, "")),
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: () => removeFamily(f.id)
+  }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))), /*#__PURE__*/React.createElement("div", {
     style: {
-      marginTop: 4
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
     }
-  }))), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement(PersonFields, {
+    person: f.person1,
+    onChange: p => updateFamily(f.id, {
+      person1: p
+    }),
+    onResetPin: () => updateFamily(f.id, {
+      person1: {
+        ...f.person1,
+        pin: ""
+      }
+    })
+  }), /*#__PURE__*/React.createElement(PersonFields, {
+    person: f.person2,
+    onChange: p => updateFamily(f.id, {
+      person2: p
+    }),
+    onResetPin: () => updateFamily(f.id, {
+      person2: {
+        ...f.person2,
+        pin: ""
+      }
+    })
+  })))), /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
-      background: THEME.saffron,
-      color: "#fff",
+      background: "#fff",
+      border: `1px dashed ${THEME.saffronDark}`,
+      color: THEME.saffronDark,
       width: "100%",
-      justifyContent: "center",
-      marginTop: 18,
-      padding: "10px"
+      justifyContent: "center"
     },
-    onClick: save
-  }, "Guardar PINes"), saved && /*#__PURE__*/React.createElement("p", {
+    onClick: addFamily
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir familia"), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12.5,
-      color: THEME.oliveDark,
-      textAlign: "center",
-      marginTop: 8
-    }
-  }, "✓ Guardado"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 24,
+      marginTop: 20,
       padding: 12,
       background: THEME.borderSoft,
       borderRadius: 10,
       fontSize: 12,
       color: THEME.inkSoft
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "Recuerda:"), " Editor edita Ingredientes y Opciones. Comprador solo marca lo comprado en la Lista de la compra. General solo puede ver. Admin lo ve y edita todo."));
+  }, /*#__PURE__*/React.createElement("strong", null, "Recuerda:"), " Editor edita Ingredientes y Opciones. Comprador solo marca lo comprado en la Lista de la compra. General solo puede ver. Admin lo ve y edita todo, incluida esta pantalla."));
 }
 function migrateData(d) {
   if (!d) return d;
@@ -1232,9 +1591,8 @@ function App() {
   const [data, setData] = useState(null);
   const [shoppingList, setShoppingList] = useState(null);
   const [history, setHistory] = useState(null);
-  const [access, setAccess] = useState(null);
-  const [role, setRole] = useState(null);
-  const [roleChecked, setRoleChecked] = useState(false);
+  const [people, setPeople] = useState(null);
+  const [session, setSession] = useState(null); // { familyId, personKey }
   const [tab, setTab] = useState("shopping");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1251,13 +1609,21 @@ function App() {
           d = {
             ingredients: SEED_INGREDIENTS,
             supermarkets: SEED_SUPERMARKETS,
-            categories: SEED_CATEGORIES
+            categories: SEED_CATEGORIES,
+            childWeight: 0.5
           };
           needsSave = true;
         } else {
           const migrated = migrateData(d);
           if (migrated !== d) {
             d = migrated;
+            needsSave = true;
+          }
+          if (d.childWeight === undefined) {
+            d = {
+              ...d,
+              childWeight: 0.5
+            };
             needsSave = true;
           }
         }
@@ -1268,21 +1634,27 @@ function App() {
           h = SEED_HISTORY;
           await storage.set("paella-history", h);
         }
-        let a = await storage.get("paella-access");
-        if (!a) {
-          a = SEED_ACCESS;
-          await storage.set("paella-access", a);
+        let p = await storage.get("paella-people");
+        if (!p) {
+          p = SEED_PEOPLE;
+          await storage.set("paella-people", p);
         }
         if (!cancelled) {
           setData(d);
           setShoppingList(sl);
           setHistory(h);
-          setAccess(a);
+          setPeople(p);
           try {
-            const saved = JSON.parse(localStorage.getItem("paella_role_v1") || "null");
-            if (saved && saved.role === "general") setRole("general");else if (saved && saved.role === "editor" && saved.pin === a.editorPin && a.editorPin) setRole("editor");else if (saved && saved.role === "comprador" && saved.pin === a.compradorPin && a.compradorPin) setRole("comprador");else if (saved && saved.role === "admin" && saved.pin === a.adminPin && a.adminPin) setRole("admin");
+            const saved = JSON.parse(localStorage.getItem("paella_person_v1") || "null");
+            if (saved) {
+              const fam = p.find(f => f.id === saved.familyId);
+              const person = fam && fam[saved.personKey];
+              if (person && person.pin && person.pin === saved.pin) setSession({
+                familyId: saved.familyId,
+                personKey: saved.personKey
+              });
+            }
           } catch (e) {/* ignore */}
-          setRoleChecked(true);
           setLoading(false);
         }
       } catch (e) {
@@ -1298,33 +1670,66 @@ function App() {
       cancelled = true;
     };
   }, []);
-  const login = (roleName, pin) => {
-    setRole(roleName);
-    try {
-      localStorage.setItem("paella_role_v1", JSON.stringify({
-        role: roleName,
-        pin: pin || ""
-      }));
-    } catch (e) {/* ignore */}
-  };
-  const logout = () => {
-    setRole(null);
-    try {
-      localStorage.removeItem("paella_role_v1");
-    } catch (e) {/* ignore */}
-  };
-  const persistAccess = useCallback(async next => {
-    setAccess(next);
+  const persistPeople = useCallback(async next => {
+    setPeople(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-access", next);
+      await storage.set("paella-people", next);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
-      setError("No se ha podido guardar el acceso.");
+      setError("No se ha podido guardar las familias.");
       setTimeout(() => setError(""), 2500);
     }
   }, []);
+  const attemptLogin = (familyId, personKey, pin, isNew) => {
+    if (!pin) return false;
+    if (isNew) {
+      const next = people.map(f => f.id === familyId ? {
+        ...f,
+        [personKey]: {
+          ...f[personKey],
+          pin
+        }
+      } : f);
+      persistPeople(next);
+      setSession({
+        familyId,
+        personKey
+      });
+      try {
+        localStorage.setItem("paella_person_v1", JSON.stringify({
+          familyId,
+          personKey,
+          pin
+        }));
+      } catch (e) {/* ignore */}
+      return true;
+    }
+    const fam = people.find(f => f.id === familyId);
+    const person = fam && fam[personKey];
+    if (person && pin === person.pin) {
+      setSession({
+        familyId,
+        personKey
+      });
+      try {
+        localStorage.setItem("paella_person_v1", JSON.stringify({
+          familyId,
+          personKey,
+          pin
+        }));
+      } catch (e) {/* ignore */}
+      return true;
+    }
+    return false;
+  };
+  const logout = () => {
+    setSession(null);
+    try {
+      localStorage.removeItem("paella_person_v1");
+    } catch (e) {/* ignore */}
+  };
   const persistData = useCallback(async next => {
     setData(next);
     try {
@@ -1604,7 +2009,7 @@ function App() {
       pct: Math.round(done / total * 100)
     };
   }, [shoppingList]);
-  if (loading) return /*#__PURE__*/React.createElement("div", {
+  if (loading || !people) return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
       minHeight: "100vh",
@@ -1615,12 +2020,18 @@ function App() {
       color: THEME.inkSoft
     }
   }, "Cargando la lista…");
-  if (!role) {
-    return /*#__PURE__*/React.createElement(RoleScreen, {
-      access: access,
-      onLogin: login
+  const adminNames = people.flatMap(f => [f.person1, f.person2]).filter(p => p.role === "admin" && p.name).map(p => p.name).join(" o ");
+  if (!session) {
+    return /*#__PURE__*/React.createElement(PersonLoginScreen, {
+      families: people,
+      adminNames: adminNames,
+      attemptLogin: attemptLogin
     });
   }
+  const currentFamily = people.find(f => f.id === session.familyId);
+  const currentPerson = currentFamily ? currentFamily[session.personKey] : null;
+  const role = currentPerson && currentPerson.role || "general";
+  const displayName = currentPerson && currentPerson.name || "";
   const perms = {
     canManageIngredients: role === "admin" || role === "editor",
     canManageOptions: role === "admin" || role === "editor",
@@ -1634,6 +2045,14 @@ function App() {
     comprador: "Comprador",
     general: "General"
   }[role] || role;
+  const updateOwnFamily = patch => persistPeople(people.map(f => f.id === session.familyId ? {
+    ...f,
+    ...patch
+  } : f));
+  const updateChildWeight = w => persistData({
+    ...data,
+    childWeight: w
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -1680,7 +2099,7 @@ function App() {
       textDecoration: "underline",
       padding: 0
     }
-  }, roleLabel, " · cambiar")), /*#__PURE__*/React.createElement("p", {
+  }, displayName, " (", roleLabel, ") · cambiar")), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: "6px 0 0",
       color: THEME.inkSoft,
@@ -1746,7 +2165,17 @@ function App() {
       border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
     },
     onClick: () => setTab("history")
-  }, "Historial"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
+  }, "Historial"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "accounts" ? THEME.saffron : "#fff",
+      color: tab === "accounts" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "accounts" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("accounts")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "💶"), " Cuentas"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: tab === "admin" ? THEME.tomato : "#fff",
@@ -1781,7 +2210,9 @@ function App() {
     removeIngredientCategory: removeIngredientCategory,
     renameIngredientCategory: renameIngredientCategory,
     moveIngredientCategory: moveIngredientCategory,
-    readOnly: !perms.canManageOptions
+    readOnly: !perms.canManageOptions,
+    childWeight: data.childWeight,
+    updateChildWeight: updateChildWeight
   }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
     shoppingList: shoppingList,
     grouped: grouped,
@@ -1806,9 +2237,15 @@ function App() {
     importCurrentListAsYear: importCurrentListAsYear,
     saveYearResults: saveYearResults,
     readOnly: !perms.canManageHistory
+  }), tab === "accounts" && /*#__PURE__*/React.createElement(AccountsTab, {
+    people: people,
+    persistPeople: persistPeople,
+    childWeight: data.childWeight || 0.5,
+    session: session,
+    isAdmin: perms.isAdmin
   }), tab === "admin" && perms.isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
-    access: access,
-    persistAccess: persistAccess
+    people: people,
+    persistPeople: persistPeople
   })), savingNote && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -2389,7 +2826,9 @@ function OptionsTab({
   removeIngredientCategory,
   renameIngredientCategory,
   moveIngredientCategory,
-  readOnly
+  readOnly,
+  childWeight,
+  updateChildWeight
 }) {
   const [newMarket, setNewMarket] = useState("");
   const [newCat, setNewCat] = useState("");
@@ -2541,7 +2980,31 @@ function OptionsTab({
         setNewMarket("");
       }
     }
-  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir")));
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir")), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      margin: "20px 0 6px"
+    }
+  }, "Cuentas"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "¿Cuánto cuenta un niño frente a un adulto al repartir el gasto? (0 = gratis, 1 = igual que un adulto)"), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "number",
+    step: "0.05",
+    min: "0",
+    max: "1",
+    disabled: readOnly,
+    value: childWeight,
+    onChange: e => updateChildWeight(e.target.value === "" ? 0 : parseFloat(e.target.value)),
+    style: {
+      maxWidth: 100
+    }
+  }));
 }
 function PaellaDial({
   pct,
