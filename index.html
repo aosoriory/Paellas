@@ -151,7 +151,7 @@ const SEED_PEOPLE = [{
   },
   adults: 0,
   kids: 0,
-  spent: 0
+  expenses: []
 }];
 const SEED_CATEGORIES = [{
   id: "c1",
@@ -1016,6 +1016,7 @@ function PersonLoginScreen({
   attemptLogin
 }) {
   const [selected, setSelected] = useState(null);
+  const sorted = useMemo(() => sortByLastName(families), [families]);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -1087,7 +1088,7 @@ function PersonLoginScreen({
       color: THEME.inkSoft,
       fontWeight: 600
     }
-  }, "Nombre 2"))), /*#__PURE__*/React.createElement("tbody", null, families.map(f => /*#__PURE__*/React.createElement("tr", {
+  }, "Nombre 2"))), /*#__PURE__*/React.createElement("tbody", null, sorted.map(f => /*#__PURE__*/React.createElement("tr", {
     key: f.id,
     style: {
       borderBottom: `1px solid ${THEME.borderSoft}`
@@ -1231,22 +1232,60 @@ function computeSettlements(balances) {
   }
   return transfers;
 }
+function sortByLastName(list) {
+  return [...list].sort((a, b) => (a.lastName || "").localeCompare(b.lastName || "", "es"));
+}
+function NumberField({
+  value,
+  onCommit,
+  style,
+  ...props
+}) {
+  const [text, setText] = useState(String(value === undefined || value === null ? "" : value));
+  useEffect(() => {
+    setText(String(value === undefined || value === null ? "" : value));
+  }, [value]);
+  return /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    type: "number",
+    value: text,
+    onChange: e => setText(e.target.value),
+    onBlur: () => {
+      const n = text.trim() === "" ? 0 : parseFloat(text);
+      onCommit(isNaN(n) ? 0 : n);
+    },
+    style: style,
+    ...props
+  });
+}
+function familySpent(f) {
+  if (Array.isArray(f.expenses)) return f.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  return Number(f.spent) || 0;
+}
 function AccountsTab({
   people,
   persistPeople,
   childWeight,
+  adultAge,
   session,
-  isAdmin
+  isAdmin,
+  history,
+  saveYearAccounts
 }) {
   const [editingId, setEditingId] = useState(null);
+  const [saveYear, setSaveYear] = useState(String(new Date().getFullYear()));
+  const [savedMsg, setSavedMsg] = useState(false);
+  const sorted = useMemo(() => sortByLastName(people), [people]);
   const totals = useMemo(() => {
-    const totalSpent = people.reduce((s, f) => s + (Number(f.spent) || 0), 0);
+    const totalSpent = people.reduce((s, f) => s + familySpent(f), 0);
+    const totalParticipants = people.reduce((s, f) => s + (Number(f.adults) || 0) + (Number(f.kids) || 0), 0);
     const totalWeighted = people.reduce((s, f) => s + (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight, 0);
     const costPerUnit = totalWeighted > 0 ? totalSpent / totalWeighted : 0;
+    const costPerChild = costPerUnit * childWeight;
     const balances = people.map(f => {
       const weighted = (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight;
       const shouldPay = weighted * costPerUnit;
-      const balance = (Number(f.spent) || 0) - shouldPay;
+      const balance = familySpent(f) - shouldPay;
       return {
         id: f.id,
         name: f.lastName || "(sin apellido)",
@@ -1257,8 +1296,10 @@ function AccountsTab({
     });
     return {
       totalSpent,
+      totalParticipants,
       totalWeighted,
       costPerUnit,
+      costPerChild,
       balances
     };
   }, [people, childWeight]);
@@ -1267,23 +1308,50 @@ function AccountsTab({
     ...f,
     ...patch
   } : f));
+  const setExpenses = (id, expenses) => updateFamily(id, {
+    expenses
+  });
+  const addExpense = f => setExpenses(f.id, [...(f.expenses || []), {
+    id: uid("exp"),
+    concept: "",
+    amount: 0
+  }]);
+  const updateExpense = (f, expId, patch) => setExpenses(f.id, (f.expenses || []).map(e => e.id === expId ? {
+    ...e,
+    ...patch
+  } : e));
+  const removeExpense = (f, expId) => setExpenses(f.id, (f.expenses || []).filter(e => e.id !== expId));
+  const doSaveYear = () => {
+    const y = parseInt(saveYear, 10);
+    if (!y) return;
+    saveYearAccounts(y, {
+      totalSpent: totals.totalSpent,
+      totalParticipants: totals.totalParticipants,
+      totalWeighted: totals.totalWeighted,
+      costPerUnit: totals.costPerUnit,
+      costPerChild: totals.costPerChild
+    });
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 1500);
+  };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cada familia indica cuántos vienen y cuánto ha ido pagando. El reparto se calcula solo."), /*#__PURE__*/React.createElement("div", {
+  }, "Cada familia indica cuántos vienen y sus gastos (uno por concepto). El reparto se calcula solo."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 8,
       marginBottom: 18
     }
-  }, people.map(f => {
+  }, sorted.map(f => {
     const bal = totals.balances.find(b => b.id === f.id);
     const canEdit = isAdmin || f.id === session.familyId;
     const editing = editingId === f.id;
+    const spent = familySpent(f);
     return /*#__PURE__*/React.createElement("div", {
       key: f.id,
       style: {
@@ -1314,23 +1382,25 @@ function AccountsTab({
       onClick: () => setEditingId(editing ? null : f.id)
     }, editing ? "Listo" : "Editar")), editing ? /*#__PURE__*/React.createElement("div", {
       style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr",
-        gap: 6,
         marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 6,
+        marginBottom: 10
       }
     }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       style: {
         fontSize: 10.5,
         color: THEME.inkSoft
       }
-    }, "Adultos"), /*#__PURE__*/React.createElement("input", {
-      className: "paella-input",
-      type: "number",
+    }, "Adultos (", adultAge, "+ años)"), /*#__PURE__*/React.createElement(NumberField, {
       min: "0",
       value: f.adults,
-      onChange: e => updateFamily(f.id, {
-        adults: e.target.value === "" ? 0 : parseInt(e.target.value, 10)
+      onCommit: n => updateFamily(f.id, {
+        adults: n
       }),
       style: {
         textAlign: "center",
@@ -1341,46 +1411,98 @@ function AccountsTab({
         fontSize: 10.5,
         color: THEME.inkSoft
       }
-    }, "Niños"), /*#__PURE__*/React.createElement("input", {
-      className: "paella-input",
-      type: "number",
+    }, "Niños (menos de ", adultAge, ")"), /*#__PURE__*/React.createElement(NumberField, {
       min: "0",
       value: f.kids,
-      onChange: e => updateFamily(f.id, {
-        kids: e.target.value === "" ? 0 : parseInt(e.target.value, 10)
+      onCommit: n => updateFamily(f.id, {
+        kids: n
       }),
       style: {
         textAlign: "center",
         padding: "5px"
       }
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    }))), /*#__PURE__*/React.createElement("label", {
       style: {
         fontSize: 10.5,
         color: THEME.inkSoft
       }
-    }, "Gastado (€)"), /*#__PURE__*/React.createElement("input", {
+    }, "Gastos"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginTop: 4
+      }
+    }, (f.expenses || []).map(e => /*#__PURE__*/React.createElement("div", {
+      key: e.id,
+      style: {
+        display: "flex",
+        gap: 6,
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement("input", {
       className: "paella-input",
-      type: "number",
-      min: "0",
-      step: "0.5",
-      value: f.spent,
-      onChange: e => updateFamily(f.id, {
-        spent: e.target.value === "" ? 0 : parseFloat(e.target.value)
+      placeholder: "Concepto (ej. supermercado)",
+      value: e.concept,
+      onChange: ev => updateExpense(f, e.id, {
+        concept: ev.target.value
       }),
       style: {
-        textAlign: "center",
-        padding: "5px"
+        flex: 2,
+        fontSize: 12.5,
+        padding: "5px 7px"
       }
-    }))) : /*#__PURE__*/React.createElement("div", {
+    }), /*#__PURE__*/React.createElement(NumberField, {
+      min: "0",
+      step: "0.5",
+      value: e.amount,
+      onCommit: n => updateExpense(f, e.id, {
+        amount: n
+      }),
+      style: {
+        flex: 1,
+        textAlign: "center",
+        padding: "5px",
+        fontSize: 12.5
+      }
+    }), /*#__PURE__*/React.createElement("button", {
+      className: "icon-btn",
+      onClick: () => removeExpense(f, e.id)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 14
+    }, "🗑️"))))), /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: "#fff",
+        border: `1px dashed ${THEME.saffronDark}`,
+        color: THEME.saffronDark,
+        fontSize: 12,
+        marginTop: 6,
+        padding: "5px 8px"
+      },
+      onClick: () => addExpense(f)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 13
+    }, "➕"), " Añadir gasto")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 6,
+        fontSize: 12.5,
+        color: THEME.inkSoft
+      }
+    }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 14,
-        marginTop: 6,
-        fontSize: 12.5,
-        color: THEME.inkSoft,
         flexWrap: "wrap"
       }
-    }, /*#__PURE__*/React.createElement("span", null, "👥 ", f.adults || 0, " adultos, ", f.kids || 0, " niños"), /*#__PURE__*/React.createElement("span", null, "💶 Pagado: ", (f.spent || 0).toFixed(2), " €")), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", null, "👥 ", f.adults || 0, " adultos, ", f.kids || 0, " niños"), /*#__PURE__*/React.createElement("span", null, "💶 Pagado: ", spent.toFixed(2), " €")), (f.expenses || []).length > 0 && /*#__PURE__*/React.createElement("ul", {
+      style: {
+        margin: "4px 0 0",
+        paddingLeft: 18
+      }
+    }, f.expenses.map(e => /*#__PURE__*/React.createElement("li", {
+      key: e.id
+    }, e.concept || "(sin concepto)", ": ", (Number(e.amount) || 0).toFixed(2), " €")))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 6,
         fontSize: 13,
@@ -1396,7 +1518,7 @@ function AccountsTab({
       marginBottom: 18,
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, totals.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerUnit.toFixed(2), " €"))), /*#__PURE__*/React.createElement("h3", {
+  }, /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, totals.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, totals.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerChild.toFixed(2), " €"))), /*#__PURE__*/React.createElement("h3", {
     style: {
       fontFamily: "'Fraunces', serif",
       fontSize: 16,
@@ -1411,7 +1533,8 @@ function AccountsTab({
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 6
+      gap: 6,
+      marginBottom: 18
     }
   }, transfers.map((t, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
@@ -1441,11 +1564,50 @@ function AccountsTab({
       fontWeight: 700,
       color: THEME.tomatoDark
     }
-  }, t.amount.toFixed(2), " €")))));
+  }, t.amount.toFixed(2), " €")))), isAdmin && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 12,
+      border: `1px dashed ${THEME.border}`,
+      borderRadius: 10
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      margin: "0 0 8px"
+    }
+  }, "Guarda este resumen en el Historial de un año concreto."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    value: saveYear,
+    onChange: e => setSaveYear(e.target.value),
+    style: {
+      maxWidth: 100
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff"
+    },
+    onClick: doSaveYear
+  }, "Guardar en Historial")), savedMsg && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: THEME.oliveDark,
+      marginTop: 6
+    }
+  }, "✓ Guardado")));
 }
 function AdminTab({
   people,
-  persistPeople
+  persistPeople,
+  onPreview
 }) {
   const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
     ...f,
@@ -1469,13 +1631,14 @@ function AdminTab({
     kids: 0,
     spent: 0
   }]);
+  const sorted = useMemo(() => sortByLastName(people), [people]);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Gestiona las familias: nombres, roles, y resetea PINes si alguien lo olvida."), people.map(f => /*#__PURE__*/React.createElement("div", {
+  }, "Gestiona las familias: nombres, roles, y resetea PINes si alguien lo olvida. Toca \"👁️ Ver como\" para probar la app como esa persona, sin PIN."), sorted.map(f => /*#__PURE__*/React.createElement("div", {
     key: f.id,
     style: {
       border: `1px solid ${THEME.border}`,
@@ -1510,7 +1673,7 @@ function AdminTab({
       gridTemplateColumns: "1fr 1fr",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement(PersonFields, {
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(PersonFields, {
     person: f.person1,
     onChange: p => updateFamily(f.id, {
       person1: p
@@ -1521,7 +1684,17 @@ function AdminTab({
         pin: ""
       }
     })
-  }), /*#__PURE__*/React.createElement(PersonFields, {
+  }), f.person1.name && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 11,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      padding: "3px 6px",
+      marginTop: 4
+    },
+    onClick: () => onPreview(f.id, "person1")
+  }, "👁️ Ver como")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(PersonFields, {
     person: f.person2,
     onChange: p => updateFamily(f.id, {
       person2: p
@@ -1532,7 +1705,17 @@ function AdminTab({
         pin: ""
       }
     })
-  })))), /*#__PURE__*/React.createElement("button", {
+  }), f.person2.name && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 11,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      padding: "3px 6px",
+      marginTop: 4
+    },
+    onClick: () => onPreview(f.id, "person2")
+  }, "👁️ Ver como"))))), /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: "#fff",
@@ -1555,23 +1738,26 @@ function AdminTab({
 }
 function migrateData(d) {
   if (!d) return d;
-  if (d.categories) return d;
-  const nameToId = new Map();
-  const categories = [];
+  let categories = d.categories ? [...d.categories] : [];
+  let changed = !d.categories;
+  const nameToId = new Map(categories.map(c => [c.name, c.id]));
   const ingredients = (d.ingredients || []).map(ing => {
-    const catName = ing.category || "";
-    let catId = "";
-    if (catName) {
-      if (!nameToId.has(catName)) {
+    const hasCategoryId = ing.categoryId !== undefined && ing.categoryId !== null;
+    const legacyName = ing.category || "";
+    if (hasCategoryId && !legacyName) return ing;
+    let catId = hasCategoryId ? ing.categoryId : "";
+    if (legacyName) {
+      if (!nameToId.has(legacyName)) {
         const id = uid("c");
-        nameToId.set(catName, id);
+        nameToId.set(legacyName, id);
         categories.push({
           id,
-          name: catName
+          name: legacyName
         });
       }
-      catId = nameToId.get(catName);
+      catId = nameToId.get(legacyName);
     }
+    changed = true;
     const rest = {
       ...ing
     };
@@ -1581,6 +1767,7 @@ function migrateData(d) {
       categoryId: catId
     };
   });
+  if (!changed) return d;
   return {
     ...d,
     ingredients,
@@ -1593,6 +1780,7 @@ function App() {
   const [history, setHistory] = useState(null);
   const [people, setPeople] = useState(null);
   const [session, setSession] = useState(null); // { familyId, personKey }
+  const [previewSession, setPreviewSession] = useState(null); // admin-only "view as" mode
   const [tab, setTab] = useState("shopping");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1610,7 +1798,8 @@ function App() {
             ingredients: SEED_INGREDIENTS,
             supermarkets: SEED_SUPERMARKETS,
             categories: SEED_CATEGORIES,
-            childWeight: 0.5
+            childWeight: 0.5,
+            adultAge: 13
           };
           needsSave = true;
         } else {
@@ -1626,6 +1815,13 @@ function App() {
             };
             needsSave = true;
           }
+          if (d.adultAge === undefined) {
+            d = {
+              ...d,
+              adultAge: 13
+            };
+            needsSave = true;
+          }
         }
         if (needsSave) await storage.set("paella-club-data", d);
         let sl = await storage.get("paella-shopping-list");
@@ -1635,10 +1831,25 @@ function App() {
           await storage.set("paella-history", h);
         }
         let p = await storage.get("paella-people");
+        let peopleNeedsSave = false;
         if (!p) {
           p = SEED_PEOPLE;
-          await storage.set("paella-people", p);
+          peopleNeedsSave = true;
+        } else {
+          const migratedPeople = p.map(f => Array.isArray(f.expenses) ? f : {
+            ...f,
+            expenses: f.spent ? [{
+              id: uid("exp"),
+              concept: "Gasto",
+              amount: Number(f.spent) || 0
+            }] : []
+          });
+          if (JSON.stringify(migratedPeople) !== JSON.stringify(p)) {
+            p = migratedPeople;
+            peopleNeedsSave = true;
+          }
         }
+        if (peopleNeedsSave) await storage.set("paella-people", p);
         if (!cancelled) {
           setData(d);
           setShoppingList(sl);
@@ -1726,6 +1937,7 @@ function App() {
   };
   const logout = () => {
     setSession(null);
+    setPreviewSession(null);
     try {
       localStorage.removeItem("paella_person_v1");
     } catch (e) {/* ignore */}
@@ -1861,6 +2073,21 @@ function App() {
       id: uid("y"),
       year: y,
       categories
+    }].sort((a, b) => b.year - a.year);
+    persistHistory(next);
+  };
+  const saveYearAccounts = (year, accounts) => {
+    const y = parseInt(year, 10);
+    if (!y) return;
+    const existing = history.find(h => h.year === y);
+    const next = existing ? history.map(h => h.year === y ? {
+      ...h,
+      accounts
+    } : h) : [...history, {
+      id: uid("y"),
+      year: y,
+      categories: [],
+      accounts
     }].sort((a, b) => b.year - a.year);
     persistHistory(next);
   };
@@ -2028,8 +2255,13 @@ function App() {
       attemptLogin: attemptLogin
     });
   }
-  const currentFamily = people.find(f => f.id === session.familyId);
-  const currentPerson = currentFamily ? currentFamily[session.personKey] : null;
+  const realFamily = people.find(f => f.id === session.familyId);
+  const realPerson = realFamily ? realFamily[session.personKey] : null;
+  const realRole = realPerson && realPerson.role || "general";
+  const realIsAdmin = realRole === "admin";
+  const effectiveSession = previewSession || session;
+  const currentFamily = people.find(f => f.id === effectiveSession.familyId);
+  const currentPerson = currentFamily ? currentFamily[effectiveSession.personKey] : null;
   const role = currentPerson && currentPerson.role || "general";
   const displayName = currentPerson && currentPerson.name || "";
   const perms = {
@@ -2053,6 +2285,10 @@ function App() {
     ...data,
     childWeight: w
   });
+  const updateAdultAge = a => persistData({
+    ...data,
+    adultAge: a
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -2060,7 +2296,26 @@ function App() {
       fontFamily: "'Inter', sans-serif",
       color: THEME.ink
     }
-  }, /*#__PURE__*/React.createElement("header", {
+  }, previewSession && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.tomato,
+      color: "#fff",
+      textAlign: "center",
+      padding: "6px 10px",
+      fontSize: 12.5
+    }
+  }, "👁️ Viendo como ", displayName, " (", roleLabel, ") — ", /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPreviewSession(null),
+    style: {
+      background: "none",
+      border: "none",
+      color: "#fff",
+      textDecoration: "underline",
+      fontSize: 12.5,
+      cursor: "pointer",
+      padding: 0
+    }
+  }, "volver a Admin")), /*#__PURE__*/React.createElement("header", {
     style: {
       padding: "28px 20px 18px",
       maxWidth: 720,
@@ -2088,7 +2343,7 @@ function App() {
       fontSize: 28,
       margin: 0
     }
-  }, "La lista de la paella")), /*#__PURE__*/React.createElement("button", {
+  }, "La lista de la paella")), !previewSession && /*#__PURE__*/React.createElement("button", {
     onClick: logout,
     style: {
       background: "none",
@@ -2212,7 +2467,9 @@ function App() {
     moveIngredientCategory: moveIngredientCategory,
     readOnly: !perms.canManageOptions,
     childWeight: data.childWeight,
-    updateChildWeight: updateChildWeight
+    updateChildWeight: updateChildWeight,
+    adultAge: data.adultAge,
+    updateAdultAge: updateAdultAge
   }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
     shoppingList: shoppingList,
     grouped: grouped,
@@ -2241,11 +2498,18 @@ function App() {
     people: people,
     persistPeople: persistPeople,
     childWeight: data.childWeight || 0.5,
-    session: session,
-    isAdmin: perms.isAdmin
+    adultAge: data.adultAge || 13,
+    session: effectiveSession,
+    isAdmin: perms.isAdmin,
+    history: history,
+    saveYearAccounts: saveYearAccounts
   }), tab === "admin" && perms.isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
     people: people,
-    persistPeople: persistPeople
+    persistPeople: persistPeople,
+    onPreview: (familyId, personKey) => setPreviewSession({
+      familyId,
+      personKey
+    })
   })), savingNote && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -2699,14 +2963,12 @@ function IngredientRow({
       color: THEME.inkSoft,
       lineHeight: 1.4
     }
-  }, "Habitual"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "number",
+  }, "Habitual"), /*#__PURE__*/React.createElement(NumberField, {
     step: "0.1",
     disabled: readOnly,
     value: ing.normalQty,
-    onChange: e => updateIngredient(ing.id, {
-      normalQty: e.target.value === "" ? "" : parseFloat(e.target.value)
+    onCommit: n => updateIngredient(ing.id, {
+      normalQty: n
     }),
     style: {
       padding: "6px",
@@ -2725,14 +2987,12 @@ function IngredientRow({
       color: THEME.inkSoft,
       lineHeight: 1.4
     }
-  }, "Tenemos"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "number",
+  }, "Tenemos"), /*#__PURE__*/React.createElement(NumberField, {
     step: "0.1",
     disabled: readOnly,
     value: ing.currentQty,
-    onChange: e => updateIngredient(ing.id, {
-      currentQty: e.target.value === "" ? "" : parseFloat(e.target.value)
+    onCommit: n => updateIngredient(ing.id, {
+      currentQty: n
     }),
     style: {
       padding: "6px",
@@ -2828,7 +3088,9 @@ function OptionsTab({
   moveIngredientCategory,
   readOnly,
   childWeight,
-  updateChildWeight
+  updateChildWeight,
+  adultAge,
+  updateAdultAge
 }) {
   const [newMarket, setNewMarket] = useState("");
   const [newCat, setNewCat] = useState("");
@@ -2992,15 +3254,29 @@ function OptionsTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "¿Cuánto cuenta un niño frente a un adulto al repartir el gasto? (0 = gratis, 1 = igual que un adulto)"), /*#__PURE__*/React.createElement("input", {
-    className: "paella-input",
-    type: "number",
+  }, "¿Cuánto cuenta un niño frente a un adulto al repartir el gasto? (0 = gratis, 1 = igual que un adulto)"), /*#__PURE__*/React.createElement(NumberField, {
     step: "0.05",
     min: "0",
     max: "1",
     disabled: readOnly,
     value: childWeight,
-    onChange: e => updateChildWeight(e.target.value === "" ? 0 : parseFloat(e.target.value)),
+    onCommit: updateChildWeight,
+    style: {
+      maxWidth: 100,
+      marginBottom: 14
+    }
+  }), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      margin: "0 0 4px"
+    }
+  }, "¿A partir de qué edad se considera adulto?"), /*#__PURE__*/React.createElement(NumberField, {
+    step: "1",
+    min: "0",
+    disabled: readOnly,
+    value: adultAge,
+    onCommit: updateAdultAge,
     style: {
       maxWidth: 100
     }
@@ -3281,7 +3557,8 @@ function CloseYearModal({
     const init = {};
     for (const it of shoppingList.items) init[it.id] = {
       qty: `${fmtQty(it.qty)} ${it.unit}`.trim(),
-      result: ""
+      result: "",
+      comment: ""
     };
     return init;
   });
@@ -3299,12 +3576,16 @@ function CloseYearModal({
       id: uid("c"),
       name: catName,
       note: "",
-      items: items.map(it => ({
-        id: uid("hi"),
-        name: it.name,
-        qty: rows[it.id]?.qty || "",
-        note: rows[it.id]?.result || ""
-      }))
+      items: items.map(it => {
+        const r = rows[it.id] || {};
+        const note = r.result && r.comment ? `${r.result} — ${r.comment}` : r.result || r.comment || "";
+        return {
+          id: uid("hi"),
+          name: it.name,
+          qty: r.qty || "",
+          note
+        };
+      })
     }));
     onSave(year, categories);
     onClose();
@@ -3372,7 +3653,7 @@ function CloseYearModal({
       color: THEME.inkSoft,
       margin: "0 0 12px"
     }
-  }, "Toca \"Sobró\", \"Justo\" o \"Faltó\" en cada cosa. Puedes ajustar la cantidad final si hace falta."), grouped.map(([catName, items]) => /*#__PURE__*/React.createElement("div", {
+  }, "Toca \"Sobró\", \"Justo\" o \"Faltó\" en cada cosa. Puedes ajustar la cantidad y añadir un comentario."), grouped.map(([catName, items]) => /*#__PURE__*/React.createElement("div", {
     key: catName,
     style: {
       marginBottom: 16
@@ -3408,7 +3689,8 @@ function CloseYearModal({
       display: "flex",
       gap: 6,
       alignItems: "center",
-      flexWrap: "wrap"
+      flexWrap: "wrap",
+      marginBottom: 6
     }
   }, /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
@@ -3441,7 +3723,18 @@ function CloseYearModal({
         result: active ? "" : opt
       })
     }, opt);
-  }))))))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Comentario (opcional)",
+    style: {
+      fontSize: 12.5,
+      padding: "4px 6px"
+    },
+    value: rows[it.id]?.comment || "",
+    onChange: e => setRow(it.id, {
+      comment: e.target.value
+    })
+  })))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -3572,7 +3865,21 @@ function HistoryTab({
       style: {
         padding: "10px 14px 14px"
       }
-    }, h.categories.map(c => /*#__PURE__*/React.createElement("div", {
+    }, h.accounts && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: THEME.borderSoft,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 14,
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        marginBottom: 4,
+        fontFamily: "'Fraunces', serif"
+      }
+    }, "💶 Cuentas de este año"), /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerChild.toFixed(2), " €"))), h.categories.map(c => /*#__PURE__*/React.createElement("div", {
       key: c.id,
       style: {
         marginBottom: 14
