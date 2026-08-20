@@ -1420,7 +1420,7 @@ function InscripcionTab({
         padding: "3px 8px"
       },
       onClick: () => setEditingId(editing ? null : f.id)
-    }, editing ? "Listo" : "Editar")), editing ? /*#__PURE__*/React.createElement("div", {
+    }, editing ? "▼ Listo" : "▶ Editar")), editing ? /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 8
       }
@@ -1518,6 +1518,9 @@ function InscripcionTab({
     totals: totals
   }));
 }
+function transferKey(from, to) {
+  return `${from}||${to}`;
+}
 function AccountsTab({
   people,
   persistPeople,
@@ -1529,7 +1532,9 @@ function AccountsTab({
   saveYearAccounts,
   gastosOpen,
   updateGastosOpen,
-  adminNames
+  adminNames,
+  paymentStatus,
+  updatePaymentStatus
 }) {
   const [editingId, setEditingId] = useState(null);
   const [saveYear, setSaveYear] = useState(String(new Date().getFullYear()));
@@ -1537,6 +1542,7 @@ function AccountsTab({
   const sorted = useMemo(() => sortByLastName(people), [people]);
   const totals = useMemo(() => computeAccountTotals(people, childWeight), [people, childWeight]);
   const transfers = useMemo(() => computeSettlements(totals.balances), [totals.balances]);
+  const allSettled = transfers.length > 0 && transfers.every(t => (paymentStatus[transferKey(t.from, t.to)] || {}).confirmed);
   const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
     ...f,
     ...patch
@@ -1631,7 +1637,7 @@ function AccountsTab({
         padding: "3px 8px"
       },
       onClick: () => setEditingId(editing ? null : f.id)
-    }, editing ? "Listo" : "Editar")), editing ? /*#__PURE__*/React.createElement("div", {
+    }, editing ? "▼ Listo" : "▶ Editar")), editing ? /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 8
       }
@@ -1727,17 +1733,31 @@ function AccountsTab({
       fontSize: 16,
       margin: "0 0 8px"
     }
-  }, "Quién paga a quién"), /*#__PURE__*/React.createElement("div", {
+  }, "Quién paga a quién"), allSettled && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#E9F2E0",
+      border: `1px solid ${THEME.olive}`,
+      color: THEME.oliveDark,
+      borderRadius: 10,
+      padding: "10px 12px",
+      fontSize: 14,
+      fontWeight: 700,
+      textAlign: "center",
+      marginBottom: 12
+    }
+  }, "✅✅ Ajuste de cuentas realizado"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 10,
-      marginBottom: 18
+      marginBottom: 12
     }
   }, sorted.map(f => {
     const bal = totals.balances.find(b => b.id === f.id);
-    const owedByMe = transfers.filter(t => t.from === (f.lastName || "(sin apellido)"));
-    const owedToMe = transfers.filter(t => t.to === (f.lastName || "(sin apellido)"));
+    const fName = f.lastName || "(sin apellido)";
+    const owedByMe = transfers.filter(t => t.from === fName);
+    const owedToMe = transfers.filter(t => t.to === fName);
+    const canEdit = isAdmin || f.id === session.familyId;
     return /*#__PURE__*/React.createElement("div", {
       key: f.id,
       style: {
@@ -1752,7 +1772,7 @@ function AccountsTab({
         fontFamily: "'Fraunces', serif",
         marginBottom: 4
       }
-    }, f.lastName || "(sin apellido)"), /*#__PURE__*/React.createElement("div", {
+    }, fName), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5,
         color: THEME.inkSoft,
@@ -1771,24 +1791,120 @@ function AccountsTab({
     }, bal.balance > 0.005 ? `Le deben ${bal.balance.toFixed(2)} €` : bal.balance < -0.005 ? `Debe ${Math.abs(bal.balance).toFixed(2)} €` : "Al día"), owedByMe.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5,
-        marginBottom: 4
+        marginBottom: 6
       }
-    }, /*#__PURE__*/React.createElement("strong", null, "Debe pagar a:"), owedByMe.map((t, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        paddingLeft: 10
-      }
-    }, "→ ", t.to, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")))), owedToMe.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("strong", null, "Debe pagar a:"), owedByMe.map((t, i) => {
+      const key = transferKey(t.from, t.to);
+      const st = paymentStatus[key] || {};
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          paddingLeft: 10,
+          marginTop: 3,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", null, "→ ", t.to, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")), st.confirmed ? /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: THEME.oliveDark,
+          fontWeight: 700
+        }
+      }, "✅✅ Confirmado") : st.paid ? /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: THEME.oliveDark
+        }
+      }, "✅ Pago hecho", canEdit && /*#__PURE__*/React.createElement("button", {
+        onClick: () => updatePaymentStatus(key, {
+          paid: false
+        }),
+        style: {
+          background: "none",
+          border: "none",
+          color: THEME.inkSoft,
+          fontSize: 11,
+          textDecoration: "underline",
+          cursor: "pointer",
+          marginLeft: 6
+        }
+      }, "deshacer")) : canEdit ? /*#__PURE__*/React.createElement("button", {
+        className: "tab-btn",
+        style: {
+          fontSize: 11.5,
+          background: "#fff",
+          border: `1px solid ${THEME.border}`,
+          padding: "3px 8px"
+        },
+        onClick: () => updatePaymentStatus(key, {
+          paid: true
+        })
+      }, "Marcar pago hecho") : null);
+    })), owedToMe.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5
       }
-    }, /*#__PURE__*/React.createElement("strong", null, "Recibe de:"), owedToMe.map((t, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        paddingLeft: 10
-      }
-    }, "← ", t.from, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")))));
-  })), isAdmin && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("strong", null, "Recibe de:"), owedToMe.map((t, i) => {
+      const key = transferKey(t.from, t.to);
+      const st = paymentStatus[key] || {};
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          paddingLeft: 10,
+          marginTop: 3,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", null, "← ", t.from, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")), st.confirmed ? /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: THEME.oliveDark,
+          fontWeight: 700
+        }
+      }, "✅✅ Confirmado", canEdit && /*#__PURE__*/React.createElement("button", {
+        onClick: () => updatePaymentStatus(key, {
+          confirmed: false
+        }),
+        style: {
+          background: "none",
+          border: "none",
+          color: THEME.inkSoft,
+          fontSize: 11,
+          textDecoration: "underline",
+          cursor: "pointer",
+          marginLeft: 6
+        }
+      }, "deshacer")) : /*#__PURE__*/React.createElement(React.Fragment, null, st.paid && /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: THEME.inkSoft,
+          fontSize: 11.5
+        }
+      }, "✅ dice que ya pagó"), canEdit && /*#__PURE__*/React.createElement("button", {
+        className: "tab-btn",
+        style: {
+          fontSize: 11.5,
+          background: THEME.olive,
+          color: "#fff"
+        },
+        onClick: () => updatePaymentStatus(key, {
+          confirmed: true
+        })
+      }, "Confirmar pago recibido")));
+    })));
+  })), allSettled && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#E9F2E0",
+      border: `1px solid ${THEME.olive}`,
+      color: THEME.oliveDark,
+      borderRadius: 10,
+      padding: "10px 12px",
+      fontSize: 14,
+      fontWeight: 700,
+      textAlign: "center",
+      marginBottom: 18
+    }
+  }, "✅✅ Ajuste de cuentas realizado"), isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 12,
       border: `1px dashed ${THEME.border}`,
@@ -2066,7 +2182,8 @@ function App() {
             childWeight: 0.5,
             adultAge: 13,
             inscripcionOpen: true,
-            gastosOpen: true
+            gastosOpen: true,
+            paymentStatus: {}
           };
           needsSave = true;
         } else {
@@ -2107,6 +2224,13 @@ function App() {
             d = {
               ...d,
               gastosOpen: true
+            };
+            needsSave = true;
+          }
+          if (d.paymentStatus === undefined) {
+            d = {
+              ...d,
+              paymentStatus: {}
             };
             needsSave = true;
           }
@@ -2620,6 +2744,16 @@ function App() {
     ...data,
     gastosOpen: open
   });
+  const updatePaymentStatus = (key, patch) => persistData({
+    ...data,
+    paymentStatus: {
+      ...(data.paymentStatus || {}),
+      [key]: {
+        ...((data.paymentStatus || {})[key] || {}),
+        ...patch
+      }
+    }
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -2855,7 +2989,9 @@ function App() {
     saveYearAccounts: saveYearAccounts,
     gastosOpen: data.gastosOpen !== false,
     updateGastosOpen: updateGastosOpen,
-    adminNames: adminNames
+    adminNames: adminNames,
+    paymentStatus: data.paymentStatus || {},
+    updatePaymentStatus: updatePaymentStatus
   }), tab === "admin" && perms.isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
     people: people,
     persistPeople: persistPeople,
