@@ -1320,7 +1320,10 @@ function InscripcionTab({
   childWeight,
   adultAge,
   session,
-  isAdmin
+  isAdmin,
+  inscripcionOpen,
+  updateInscripcionOpen,
+  adminNames
 }) {
   const [editingId, setEditingId] = useState(null);
   const sorted = useMemo(() => sortByLastName(people), [people]);
@@ -1354,7 +1357,26 @@ function InscripcionTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cada familia indica cuántos vienen este año."), /*#__PURE__*/React.createElement("div", {
+  }, "Cada familia indica cuántos vienen este año."), isAdmin ? /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: inscripcionOpen ? "#fff" : THEME.olive,
+      color: inscripcionOpen ? THEME.tomatoDark : "#fff",
+      border: `1px solid ${inscripcionOpen ? THEME.tomato : THEME.olive}`,
+      marginBottom: 16
+    },
+    onClick: () => updateInscripcionOpen(!inscripcionOpen)
+  }, inscripcionOpen ? "🔒 Cerrar inscripción" : "🔓 Abrir inscripción") : !inscripcionOpen && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FBEAE4",
+      border: `1px solid ${THEME.tomato}`,
+      color: THEME.tomatoDark,
+      borderRadius: 10,
+      padding: "10px 12px",
+      fontSize: 13,
+      marginBottom: 16
+    }
+  }, "🔒 Inscripción cerrada. Si quieres cambiar algo, habla con ", adminNames || "el Admin", "."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -1362,7 +1384,7 @@ function InscripcionTab({
       marginBottom: 18
     }
   }, sorted.map(f => {
-    const canEdit = isAdmin || f.id === session.familyId;
+    const canEdit = isAdmin || inscripcionOpen && f.id === session.familyId;
     const editing = editingId === f.id;
     return /*#__PURE__*/React.createElement("div", {
       key: f.id,
@@ -1431,9 +1453,15 @@ function InscripcionTab({
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
-        gap: 6
+        gap: 6,
+        alignItems: "end"
       }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column"
+      }
+    }, /*#__PURE__*/React.createElement("label", {
       style: {
         fontSize: 10.5,
         color: THEME.inkSoft
@@ -1448,7 +1476,12 @@ function InscripcionTab({
         textAlign: "center",
         padding: "5px"
       }
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column"
+      }
+    }, /*#__PURE__*/React.createElement("label", {
       style: {
         fontSize: 10.5,
         color: THEME.inkSoft
@@ -2009,7 +2042,8 @@ function App() {
             categories: SEED_CATEGORIES,
             units: SEED_UNITS,
             childWeight: 0.5,
-            adultAge: 13
+            adultAge: 13,
+            inscripcionOpen: true
           };
           needsSave = true;
         } else {
@@ -2036,6 +2070,13 @@ function App() {
             d = {
               ...d,
               units: SEED_UNITS
+            };
+            needsSave = true;
+          }
+          if (d.inscripcionOpen === undefined) {
+            d = {
+              ...d,
+              inscripcionOpen: true
             };
             needsSave = true;
           }
@@ -2535,6 +2576,10 @@ function App() {
     ...data,
     adultAge: a
   });
+  const updateInscripcionOpen = open => persistData({
+    ...data,
+    inscripcionOpen: open
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -2754,7 +2799,10 @@ function App() {
     childWeight: data.childWeight || 0.5,
     adultAge: data.adultAge || 13,
     session: effectiveSession,
-    isAdmin: perms.isAdmin
+    isAdmin: perms.isAdmin,
+    inscripcionOpen: data.inscripcionOpen !== false,
+    updateInscripcionOpen: updateInscripcionOpen,
+    adminNames: adminNames
   }), tab === "accounts" && /*#__PURE__*/React.createElement(AccountsTab, {
     people: people,
     persistPeople: persistPeople,
