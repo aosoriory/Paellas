@@ -107,6 +107,25 @@ function hi(name, qty, note) {
     note: note || ""
   };
 }
+function moveWithinGroup(list, id, groupKeyFn, direction) {
+  const target = list.find(x => x.id === id);
+  if (!target) return list;
+  const groupKey = groupKeyFn(target);
+  const indices = [];
+  list.forEach((x, i) => {
+    if (groupKeyFn(x) === groupKey) indices.push(i);
+  });
+  const pos = indices.indexOf(list.findIndex(x => x.id === id));
+  const swapPos = pos + direction;
+  if (swapPos < 0 || swapPos >= indices.length) return list;
+  const i1 = indices[pos],
+    i2 = indices[swapPos];
+  const next = list.slice();
+  const tmp = next[i1];
+  next[i1] = next[i2];
+  next[i2] = tmp;
+  return next;
+}
 const SEED_SUPERMARKETS = [{
   id: "s1",
   name: "Mercadona"
@@ -1126,6 +1145,10 @@ function App() {
     ...data,
     ingredients: data.ingredients.filter(i => i.id !== id)
   });
+  const moveIngredient = (id, direction) => persistData({
+    ...data,
+    ingredients: moveWithinGroup(data.ingredients, id, i => i.categoryId || "", direction)
+  });
   const addSupermarket = name => {
     if (name.trim()) persistData({
       ...data,
@@ -1175,6 +1198,10 @@ function App() {
       name
     } : c)
   });
+  const moveIngredientCategory = (id, direction) => persistData({
+    ...data,
+    categories: moveWithinGroup(data.categories || [], id, () => 1, direction)
+  });
   const categoryName = id => (data?.categories || []).find(c => c.id === id)?.name || "";
   const doGenerate = () => {
     const items = data.ingredients.map(ing => {
@@ -1210,6 +1237,10 @@ function App() {
       ...it,
       checked: !it.checked
     } : it)
+  });
+  const moveShoppingItem = (id, direction) => persistShoppingList({
+    ...shoppingList,
+    items: moveWithinGroup(shoppingList.items, id, i => i.categoryId || "", direction)
   });
   const grouped = useMemo(() => {
     if (!shoppingList) return [];
@@ -1351,6 +1382,7 @@ function App() {
     updateIngredient: updateIngredient,
     addIngredient: addIngredient,
     removeIngredient: removeIngredient,
+    moveIngredient: moveIngredient,
     onGenerate: requestGenerate,
     history: history
   }), tab === "options" && /*#__PURE__*/React.createElement(OptionsTab, {
@@ -1361,14 +1393,16 @@ function App() {
     categories: data.categories || [],
     addIngredientCategory: addIngredientCategory,
     removeIngredientCategory: removeIngredientCategory,
-    renameIngredientCategory: renameIngredientCategory
+    renameIngredientCategory: renameIngredientCategory,
+    moveIngredientCategory: moveIngredientCategory
   }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
     shoppingList: shoppingList,
     grouped: grouped,
     progress: progress,
     toggleCheck: toggleCheck,
     onGenerate: requestGenerate,
-    setLightboxUrl: setLightboxUrl
+    setLightboxUrl: setLightboxUrl,
+    moveShoppingItem: moveShoppingItem
   }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
     history: history,
     addYear: addYear,
@@ -1607,6 +1641,7 @@ function IngredientsTab({
   updateIngredient,
   addIngredient,
   removeIngredient,
+  moveIngredient,
   onGenerate,
   history
 }) {
@@ -1670,17 +1705,21 @@ function IngredientsTab({
       style: {
         display: "flex",
         flexDirection: "column",
-        gap: 6,
-        padding: 8,
+        gap: 8,
+        padding: 10,
         background: THEME.cream
       }
-    }, items.map(ing => /*#__PURE__*/React.createElement(IngredientRow, {
+    }, items.map((ing, i) => /*#__PURE__*/React.createElement(IngredientRow, {
       key: ing.id,
       ing: ing,
       data: data,
       updateIngredient: updateIngredient,
       removeIngredient: removeIngredient,
-      onShowHistory: () => setHistoryFor(ing)
+      onShowHistory: () => setHistoryFor(ing),
+      onMoveUp: () => moveIngredient(ing.id, -1),
+      onMoveDown: () => moveIngredient(ing.id, 1),
+      isFirst: i === 0,
+      isLast: i === items.length - 1
     })), /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
@@ -1723,12 +1762,51 @@ function IngredientsTab({
     onClose: () => setHistoryFor(null)
   }));
 }
+function OrderArrows({
+  onUp,
+  onDown,
+  isFirst,
+  isLast
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: onUp,
+    disabled: isFirst,
+    style: {
+      padding: 2,
+      opacity: isFirst ? 0.3 : 1
+    },
+    title: "Subir"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 13
+  }, "▲")), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: onDown,
+    disabled: isLast,
+    style: {
+      padding: 2,
+      opacity: isLast ? 0.3 : 1
+    },
+    title: "Bajar"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 13
+  }, "▼")));
+}
 function IngredientRow({
   ing,
   data,
   updateIngredient,
   removeIngredient,
-  onShowHistory
+  onShowHistory,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast
 }) {
   const [expanded, setExpanded] = useState(false);
   const categories = data.categories || [];
@@ -1737,7 +1815,7 @@ function IngredientRow({
       background: THEME.card,
       border: `1px solid ${THEME.border}`,
       borderRadius: 10,
-      padding: 8
+      padding: 10
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1745,12 +1823,17 @@ function IngredientRow({
       alignItems: "center",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement(ImgThumb, {
+  }, /*#__PURE__*/React.createElement(OrderArrows, {
+    onUp: onMoveUp,
+    onDown: onMoveDown,
+    isFirst: isFirst,
+    isLast: isLast
+  }), /*#__PURE__*/React.createElement(ImgThumb, {
     url: ing.imageUrl,
-    size: 34
+    size: 40
   }), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
-    placeholder: "Nombre",
+    placeholder: "Nombre del ingrediente",
     value: ing.name,
     onChange: e => updateIngredient(ing.id, {
       name: e.target.value
@@ -1759,21 +1842,27 @@ function IngredientRow({
       flex: 1,
       minWidth: 0,
       fontWeight: 600,
-      fontSize: 13.5,
-      padding: "6px 8px"
+      fontSize: 15.5,
+      padding: "8px 10px"
     }
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-end",
+      gap: 8,
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
-      alignItems: "center",
-      width: 46
+      width: 64
     }
   }, /*#__PURE__*/React.createElement("label", {
     style: {
-      fontSize: 9.5,
+      fontSize: 10.5,
       color: THEME.inkSoft,
-      lineHeight: 1
+      lineHeight: 1.4
     }
   }, "Habitual"), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
@@ -1784,22 +1873,21 @@ function IngredientRow({
       normalQty: e.target.value === "" ? "" : parseFloat(e.target.value)
     }),
     style: {
-      padding: "4px",
+      padding: "6px",
       textAlign: "center",
-      fontSize: 13
+      fontSize: 14
     }
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
-      alignItems: "center",
-      width: 46
+      width: 64
     }
   }, /*#__PURE__*/React.createElement("label", {
     style: {
-      fontSize: 9.5,
+      fontSize: 10.5,
       color: THEME.inkSoft,
-      lineHeight: 1
+      lineHeight: 1.4
     }
   }, "Tenemos"), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
@@ -1810,34 +1898,44 @@ function IngredientRow({
       currentQty: e.target.value === "" ? "" : parseFloat(e.target.value)
     }),
     style: {
-      padding: "4px",
+      padding: "6px",
       textAlign: "center",
-      fontSize: 13
+      fontSize: 14
     }
-  })), /*#__PURE__*/React.createElement("button", {
+  })), ing.unit && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      marginBottom: 8
+    }
+  }, ing.unit), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => setExpanded(v => !v),
     title: "Más detalles"
   }, /*#__PURE__*/React.createElement(Icon, {
-    size: 14
+    size: 15
   }, expanded ? "▲" : "▼")), /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: onShowHistory,
     title: "Historial"
   }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
+    size: 16
   }, "🕘")), /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => removeIngredient(ing.id),
     title: "Eliminar"
   }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
+    size: 16
   }, "🗑️"))), expanded && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
       gap: 6,
-      marginTop: 8
+      marginTop: 10
     }
   }, /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
@@ -1885,7 +1983,8 @@ function OptionsTab({
   categories,
   addIngredientCategory,
   removeIngredientCategory,
-  renameIngredientCategory
+  renameIngredientCategory,
+  moveIngredientCategory
 }) {
   const [newMarket, setNewMarket] = useState("");
   const [newCat, setNewCat] = useState("");
@@ -1908,7 +2007,7 @@ function OptionsTab({
       gap: 8,
       marginBottom: 12
     }
-  }, categories.map(c => /*#__PURE__*/React.createElement("div", {
+  }, categories.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: c.id,
     style: {
       display: "flex",
@@ -1919,7 +2018,12 @@ function OptionsTab({
       borderRadius: 10,
       padding: "8px 10px"
     }
-  }, /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement(OrderArrows, {
+    onUp: () => moveIngredientCategory(c.id, -1),
+    onDown: () => moveIngredientCategory(c.id, 1),
+    isFirst: i === 0,
+    isLast: i === categories.length - 1
+  }), /*#__PURE__*/React.createElement("input", {
     className: "paella-input",
     style: {
       border: "none",
@@ -2109,7 +2213,8 @@ function ShoppingTab({
   progress,
   toggleCheck,
   onGenerate,
-  setLightboxUrl
+  setLightboxUrl,
+  moveShoppingItem
 }) {
   const [openItem, setOpenItem] = useState(null);
   if (!shoppingList || shoppingList.items.length === 0) {
@@ -2189,7 +2294,7 @@ function ShoppingTab({
       flexDirection: "column",
       gap: 6
     }
-  }, items.map(it => {
+  }, items.map((it, i) => {
     const open = openItem === it.id;
     return /*#__PURE__*/React.createElement("div", {
       key: it.id,
@@ -2203,12 +2308,19 @@ function ShoppingTab({
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 10,
+        gap: 8,
         padding: "9px 12px",
         cursor: "pointer"
       },
       onClick: () => setOpenItem(open ? null : it.id)
     }, /*#__PURE__*/React.createElement("span", {
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement(OrderArrows, {
+      onUp: () => moveShoppingItem(it.id, -1),
+      onDown: () => moveShoppingItem(it.id, 1),
+      isFirst: i === 0,
+      isLast: i === items.length - 1
+    })), /*#__PURE__*/React.createElement("span", {
       onClick: e => {
         e.stopPropagation();
         toggleCheck(it.id);
