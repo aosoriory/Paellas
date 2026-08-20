@@ -1268,6 +1268,223 @@ function familySpent(f) {
   if (Array.isArray(f.expenses)) return f.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   return Number(f.spent) || 0;
 }
+function effAdults(f) {
+  return f.notParticipating ? 0 : Number(f.adults) || 0;
+}
+function effKids(f) {
+  return f.notParticipating ? 0 : Number(f.kids) || 0;
+}
+function computeAccountTotals(people, childWeight) {
+  const totalSpent = people.reduce((s, f) => s + familySpent(f), 0);
+  const totalParticipants = people.reduce((s, f) => s + effAdults(f) + effKids(f), 0);
+  const totalWeighted = people.reduce((s, f) => s + effAdults(f) + effKids(f) * childWeight, 0);
+  const costPerUnit = totalWeighted > 0 ? totalSpent / totalWeighted : 0;
+  const costPerChild = costPerUnit * childWeight;
+  const balances = people.map(f => {
+    const weighted = effAdults(f) + effKids(f) * childWeight;
+    const shouldPay = weighted * costPerUnit;
+    const balance = familySpent(f) - shouldPay;
+    return {
+      id: f.id,
+      name: f.lastName || "(sin apellido)",
+      balance,
+      weighted,
+      shouldPay
+    };
+  });
+  return {
+    totalSpent,
+    totalParticipants,
+    totalWeighted,
+    costPerUnit,
+    costPerChild,
+    balances
+  };
+}
+function ParticipantsSummary({
+  totals
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.borderSoft,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 18,
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, totals.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))));
+}
+function InscripcionTab({
+  people,
+  persistPeople,
+  childWeight,
+  adultAge,
+  session,
+  isAdmin
+}) {
+  const [editingId, setEditingId] = useState(null);
+  const sorted = useMemo(() => sortByLastName(people), [people]);
+  const totals = useMemo(() => computeAccountTotals(people, childWeight), [people, childWeight]);
+  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
+    ...f,
+    ...patch
+  } : f));
+  const addOccasionalFamily = () => persistPeople([...people, {
+    id: uid("fam"),
+    lastName: "",
+    person1: {
+      name: "",
+      pin: "",
+      role: ""
+    },
+    person2: {
+      name: "",
+      pin: "",
+      role: ""
+    },
+    adults: 0,
+    kids: 0,
+    expenses: [],
+    notParticipating: false,
+    occasional: true
+  }]);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "Cada familia indica cuántos vienen este año."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      marginBottom: 18
+    }
+  }, sorted.map(f => {
+    const canEdit = isAdmin || f.id === session.familyId;
+    const editing = editingId === f.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      style: {
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontFamily: "'Fraunces', serif"
+      }
+    }, f.lastName || "(sin apellido)", f.occasional && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: THEME.inkSoft,
+        fontWeight: 400
+      }
+    }, " · ocasional")), canEdit && /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        fontSize: 11.5,
+        background: "#fff",
+        border: `1px solid ${THEME.border}`,
+        padding: "3px 8px"
+      },
+      onClick: () => setEditingId(editing ? null : f.id)
+    }, editing ? "Listo" : "Editar")), editing ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8
+      }
+    }, isAdmin && f.occasional && /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      placeholder: "Apellido / nombre",
+      value: f.lastName,
+      onChange: e => updateFamily(f.id, {
+        lastName: e.target.value
+      }),
+      style: {
+        marginBottom: 8
+      }
+    }), /*#__PURE__*/React.createElement("label", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 13,
+        marginBottom: 8,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: !!f.notParticipating,
+      onChange: e => updateFamily(f.id, {
+        notParticipating: e.target.checked
+      })
+    }), "Este año no participamos"), !f.notParticipating && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10.5,
+        color: THEME.inkSoft
+      }
+    }, "Adultos (", adultAge, "+ años)"), /*#__PURE__*/React.createElement(NumberField, {
+      min: "0",
+      value: f.adults,
+      onCommit: n => updateFamily(f.id, {
+        adults: n
+      }),
+      style: {
+        textAlign: "center",
+        padding: "5px"
+      }
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10.5,
+        color: THEME.inkSoft
+      }
+    }, "Niños (menos de ", adultAge, ", cuentan como ", String(childWeight).replace(".", ","), " adultos)"), /*#__PURE__*/React.createElement(NumberField, {
+      min: "0",
+      value: f.kids,
+      onCommit: n => updateFamily(f.id, {
+        kids: n
+      }),
+      style: {
+        textAlign: "center",
+        padding: "5px"
+      }
+    })))) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 6,
+        fontSize: 12.5,
+        color: THEME.inkSoft
+      }
+    }, f.notParticipating ? /*#__PURE__*/React.createElement("span", null, "❌ No participa este año") : /*#__PURE__*/React.createElement("span", null, "👥 ", f.adults || 0, " adultos, ", f.kids || 0, " niños")));
+  })), isAdmin && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px dashed ${THEME.saffronDark}`,
+      color: THEME.saffronDark,
+      width: "100%",
+      justifyContent: "center",
+      marginBottom: 18
+    },
+    onClick: addOccasionalFamily
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir familia ocasional"), /*#__PURE__*/React.createElement(ParticipantsSummary, {
+    totals: totals
+  }));
+}
 function AccountsTab({
   people,
   persistPeople,
@@ -1282,33 +1499,7 @@ function AccountsTab({
   const [saveYear, setSaveYear] = useState(String(new Date().getFullYear()));
   const [savedMsg, setSavedMsg] = useState(false);
   const sorted = useMemo(() => sortByLastName(people), [people]);
-  const totals = useMemo(() => {
-    const totalSpent = people.reduce((s, f) => s + familySpent(f), 0);
-    const totalParticipants = people.reduce((s, f) => s + (Number(f.adults) || 0) + (Number(f.kids) || 0), 0);
-    const totalWeighted = people.reduce((s, f) => s + (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight, 0);
-    const costPerUnit = totalWeighted > 0 ? totalSpent / totalWeighted : 0;
-    const costPerChild = costPerUnit * childWeight;
-    const balances = people.map(f => {
-      const weighted = (Number(f.adults) || 0) + (Number(f.kids) || 0) * childWeight;
-      const shouldPay = weighted * costPerUnit;
-      const balance = familySpent(f) - shouldPay;
-      return {
-        id: f.id,
-        name: f.lastName || "(sin apellido)",
-        balance,
-        weighted,
-        shouldPay
-      };
-    });
-    return {
-      totalSpent,
-      totalParticipants,
-      totalWeighted,
-      costPerUnit,
-      costPerChild,
-      balances
-    };
-  }, [people, childWeight]);
+  const totals = useMemo(() => computeAccountTotals(people, childWeight), [people, childWeight]);
   const transfers = useMemo(() => computeSettlements(totals.balances), [totals.balances]);
   const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
     ...f,
@@ -1346,7 +1537,7 @@ function AccountsTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cada familia indica cuántos vienen y sus gastos (uno por concepto). El reparto se calcula solo."), /*#__PURE__*/React.createElement("div", {
+  }, "Cada familia apunta sus gastos (uno por concepto). El reparto se calcula solo, según lo indicado en Inscripción."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -1354,7 +1545,6 @@ function AccountsTab({
       marginBottom: 18
     }
   }, sorted.map(f => {
-    const bal = totals.balances.find(b => b.id === f.id);
     const canEdit = isAdmin || f.id === session.familyId;
     const editing = editingId === f.id;
     const spent = familySpent(f);
@@ -1390,44 +1580,7 @@ function AccountsTab({
       style: {
         marginTop: 8
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 6,
-        marginBottom: 10
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: 10.5,
-        color: THEME.inkSoft
-      }
-    }, "Adultos (", adultAge, "+ años)"), /*#__PURE__*/React.createElement(NumberField, {
-      min: "0",
-      value: f.adults,
-      onCommit: n => updateFamily(f.id, {
-        adults: n
-      }),
-      style: {
-        textAlign: "center",
-        padding: "5px"
-      }
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: 10.5,
-        color: THEME.inkSoft
-      }
-    }, "Niños (menos de ", adultAge, ", cuentan como ", String(childWeight).replace(".", ","), " adultos)"), /*#__PURE__*/React.createElement(NumberField, {
-      min: "0",
-      value: f.kids,
-      onCommit: n => updateFamily(f.id, {
-        kids: n
-      }),
-      style: {
-        textAlign: "center",
-        padding: "5px"
-      }
-    }))), /*#__PURE__*/React.createElement("label", {
+    }, /*#__PURE__*/React.createElement("label", {
       style: {
         fontSize: 10.5,
         color: THEME.inkSoft
@@ -1495,28 +1648,17 @@ function AccountsTab({
         fontSize: 12.5,
         color: THEME.inkSoft
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 14,
-        flexWrap: "wrap"
-      }
-    }, /*#__PURE__*/React.createElement("span", null, "👥 ", f.adults || 0, " adultos, ", f.kids || 0, " niños"), /*#__PURE__*/React.createElement("span", null, "💶 Pagado: ", spent.toFixed(2), " €")), (f.expenses || []).length > 0 && /*#__PURE__*/React.createElement("ul", {
+    }, /*#__PURE__*/React.createElement("span", null, "💶 Pagado: ", spent.toFixed(2), " €"), (f.expenses || []).length > 0 && /*#__PURE__*/React.createElement("ul", {
       style: {
         margin: "4px 0 0",
         paddingLeft: 18
       }
     }, f.expenses.map(e => /*#__PURE__*/React.createElement("li", {
       key: e.id
-    }, e.concept || "(sin concepto)", ": ", (Number(e.amount) || 0).toFixed(2), " €")))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 6,
-        fontSize: 13,
-        fontWeight: 600,
-        color: bal.balance > 0.005 ? THEME.oliveDark : bal.balance < -0.005 ? THEME.tomatoDark : THEME.inkSoft
-      }
-    }, bal.balance > 0.005 ? `Le deben ${bal.balance.toFixed(2)} €` : bal.balance < -0.005 ? `Debe ${Math.abs(bal.balance).toFixed(2)} €` : "Al día"));
-  })), /*#__PURE__*/React.createElement("div", {
+    }, e.concept || "(sin concepto)", ": ", (Number(e.amount) || 0).toFixed(2), " €")))));
+  })), /*#__PURE__*/React.createElement(ParticipantsSummary, {
+    totals: totals
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.borderSoft,
       borderRadius: 12,
@@ -1524,53 +1666,74 @@ function AccountsTab({
       marginBottom: 18,
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, totals.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, totals.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerChild.toFixed(2), " €"))), /*#__PURE__*/React.createElement("h3", {
+  }, /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, totals.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, totals.costPerChild.toFixed(2), " €"))), /*#__PURE__*/React.createElement("h3", {
     style: {
       fontFamily: "'Fraunces', serif",
       fontSize: 16,
       margin: "0 0 8px"
     }
-  }, "Quién paga a quién"), transfers.length === 0 ? /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 14,
-      color: THEME.inkSoft
-    }
-  }, "Todo el mundo está al día.") : /*#__PURE__*/React.createElement("div", {
+  }, "Quién paga a quién"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 6,
+      gap: 10,
       marginBottom: 18
     }
-  }, transfers.map((t, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      background: THEME.card,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 10,
-      padding: "9px 12px",
-      fontSize: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontWeight: 600
-    }
-  }, t.from), /*#__PURE__*/React.createElement(Icon, {
-    size: 14
-  }, "→"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontWeight: 600
-    }
-  }, t.to), /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: "auto",
-      fontWeight: 700,
-      color: THEME.tomatoDark
-    }
-  }, t.amount.toFixed(2), " €")))), isAdmin && /*#__PURE__*/React.createElement("div", {
+  }, sorted.map(f => {
+    const bal = totals.balances.find(b => b.id === f.id);
+    const owedByMe = transfers.filter(t => t.from === (f.lastName || "(sin apellido)"));
+    const owedToMe = transfers.filter(t => t.to === (f.lastName || "(sin apellido)"));
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      style: {
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontFamily: "'Fraunces', serif",
+        marginBottom: 4
+      }
+    }, f.lastName || "(sin apellido)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: THEME.inkSoft,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "👥 ", effAdults(f), " adultos, ", effKids(f), " niños"), /*#__PURE__*/React.createElement("span", null, "Ponderado: ", bal.weighted.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Coste: ", bal.shouldPay.toFixed(2), " €"), /*#__PURE__*/React.createElement("span", null, "Pagado: ", familySpent(f).toFixed(2), " €")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        color: bal.balance > 0.005 ? THEME.oliveDark : bal.balance < -0.005 ? THEME.tomatoDark : THEME.inkSoft,
+        marginBottom: owedByMe.length || owedToMe.length ? 6 : 0
+      }
+    }, bal.balance > 0.005 ? `Le deben ${bal.balance.toFixed(2)} €` : bal.balance < -0.005 ? `Debe ${Math.abs(bal.balance).toFixed(2)} €` : "Al día"), owedByMe.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement("strong", null, "Debe pagar a:"), owedByMe.map((t, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        paddingLeft: 10
+      }
+    }, "→ ", t.to, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")))), owedToMe.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5
+      }
+    }, /*#__PURE__*/React.createElement("strong", null, "Recibe de:"), owedToMe.map((t, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        paddingLeft: 10
+      }
+    }, "← ", t.from, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")))));
+  })), isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 12,
       border: `1px dashed ${THEME.border}`,
@@ -1635,7 +1798,8 @@ function AdminTab({
     },
     adults: 0,
     kids: 0,
-    spent: 0
+    expenses: [],
+    notParticipating: false
   }]);
   const sorted = useMemo(() => sortByLastName(people), [people]);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
@@ -2462,6 +2626,24 @@ function App() {
   }, /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
+      background: tab === "inscripcion" ? THEME.saffron : "#fff",
+      color: tab === "inscripcion" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "inscripcion" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("inscripcion")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "📝"), " Inscripción"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "ingredients" ? THEME.saffron : "#fff",
+      color: tab === "ingredients" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "ingredients" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("ingredients")
+  }, "Ingredientes"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
       background: tab === "shopping" ? THEME.saffron : "#fff",
       color: tab === "shopping" ? "#fff" : THEME.ink,
       border: `1px solid ${tab === "shopping" ? THEME.saffron : THEME.border}`
@@ -2472,12 +2654,22 @@ function App() {
   }, "🛒"), " Lista de la compra"), /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
-      background: tab === "ingredients" ? THEME.saffron : "#fff",
-      color: tab === "ingredients" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "ingredients" ? THEME.saffron : THEME.border}`
+      background: tab === "accounts" ? THEME.saffron : "#fff",
+      color: tab === "accounts" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "accounts" ? THEME.saffron : THEME.border}`
     },
-    onClick: () => setTab("ingredients")
-  }, "Ingredientes"), perms.canManageOptions && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setTab("accounts")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "💶"), " Cuentas"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: tab === "history" ? THEME.saffron : "#fff",
+      color: tab === "history" ? "#fff" : THEME.ink,
+      border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
+    },
+    onClick: () => setTab("history")
+  }, "Historial"), perms.canManageOptions && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: tab === "options" ? THEME.saffron : "#fff",
@@ -2487,25 +2679,7 @@ function App() {
     onClick: () => setTab("options")
   }, /*#__PURE__*/React.createElement(Icon, {
     size: 15
-  }, "⚙️"), " Opciones"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "history" ? THEME.saffron : "#fff",
-      color: tab === "history" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
-    },
-    onClick: () => setTab("history")
-  }, "Historial"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "accounts" ? THEME.saffron : "#fff",
-      color: tab === "accounts" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "accounts" ? THEME.saffron : THEME.border}`
-    },
-    onClick: () => setTab("accounts")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "💶"), " Cuentas"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
+  }, "⚙️"), " Opciones"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: tab === "admin" ? THEME.tomato : "#fff",
@@ -2574,6 +2748,13 @@ function App() {
     importCurrentListAsYear: importCurrentListAsYear,
     saveYearResults: saveYearResults,
     readOnly: !perms.canManageHistory
+  }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
+    people: people,
+    persistPeople: persistPeople,
+    childWeight: data.childWeight || 0.5,
+    adultAge: data.adultAge || 13,
+    session: effectiveSession,
+    isAdmin: perms.isAdmin
   }), tab === "accounts" && /*#__PURE__*/React.createElement(AccountsTab, {
     people: people,
     persistPeople: persistPeople,
