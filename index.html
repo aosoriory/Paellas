@@ -4307,6 +4307,7 @@ function ShoppingTab({
   const [pendingSelection, setPendingSelection] = useState(new Set());
   const [confirmItemId, setConfirmItemId] = useState(null); // item requiring "otro ya lo eligió" confirm
   const [confirmUndivide, setConfirmUndivide] = useState(false);
+  const [viewFilter, setViewFilter] = useState("all");
   const toggleCat = catName => setOpenCats(prev => {
     const next = new Set(prev);
     next.has(catName) ? next.delete(catName) : next.add(catName);
@@ -4345,6 +4346,7 @@ function ShoppingTab({
     }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"));
   }
   const isDivided = shoppingList.items.some(it => it.assignedTo);
+  const assignees = Array.from(new Set(shoppingList.items.filter(it => it.assignedTo).map(it => it.assignedTo.name)));
   const startDividing = () => {
     setPendingSelection(new Set(shoppingList.items.filter(it => it.assignedTo?.name === displayName).map(it => it.id)));
     setDividing(true);
@@ -4374,6 +4376,15 @@ function ShoppingTab({
   const confirmOverrideItem = () => {
     setPendingSelection(prev => new Set(prev).add(confirmItemId));
     setConfirmItemId(null);
+  };
+  const toggleCategorySelect = items => {
+    const selectable = items.filter(it => !it.assignedTo || it.assignedTo.name === displayName);
+    const allSelected = selectable.length > 0 && selectable.every(it => pendingSelection.has(it.id));
+    setPendingSelection(prev => {
+      const next = new Set(prev);
+      selectable.forEach(it => allSelected ? next.delete(it.id) : next.add(it.id));
+      return next;
+    });
   };
   const confirmDivision = () => {
     const next = {
@@ -4406,6 +4417,12 @@ function ShoppingTab({
     });
     setConfirmUndivide(false);
   };
+  const matchesFilter = it => {
+    if (dividing || viewFilter === "all") return true;
+    if (viewFilter === "unassigned") return !it.assignedTo;
+    return it.assignedTo?.name === viewFilter;
+  };
+  const displayGrouped = grouped.map(([catName, items]) => [catName, items.filter(matchesFilter)]).filter(([, items]) => items.length > 0);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.card,
@@ -4458,7 +4475,32 @@ function ShoppingTab({
       color: THEME.tomatoDark
     },
     onClick: () => setConfirmUndivide(true)
-  }, "Anular división")), dividing && /*#__PURE__*/React.createElement("div", {
+  }, "Anular división")), isDivided && !dividing && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft,
+      display: "block",
+      marginBottom: 4
+    }
+  }, "Ver:"), /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: viewFilter,
+    onChange: e => setViewFilter(e.target.value),
+    style: {
+      maxWidth: 280
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "Lista completa"), /*#__PURE__*/React.createElement("option", {
+    value: "unassigned"
+  }, "Sin asignar"), assignees.map(name => /*#__PURE__*/React.createElement("option", {
+    key: name,
+    value: name
+  }, "Productos de ", name)))), dividing && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF8E8",
       border: `1px solid ${THEME.saffron}`,
@@ -4478,7 +4520,7 @@ function ShoppingTab({
       color: THEME.inkSoft,
       margin: "0 0 10px"
     }
-  }, "⚠️ Esto NO los marca como comprados, solo indica quién va a por ellos."), /*#__PURE__*/React.createElement("div", {
+  }, "⚠️ Esto NO los marca como comprados, solo indica quién va a por ellos. Lo que ya tiene 🛍️ con otro nombre ya está asignado a otra persona."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -4592,8 +4634,10 @@ function ShoppingTab({
       },
       onClick: confirmOverrideItem
     }, "Confirmar"))));
-  })(), grouped.map(([catName, items]) => {
+  })(), displayGrouped.map(([catName, items]) => {
     const catOpen = openCats.has(catName);
+    const selectable = items.filter(it => !it.assignedTo || it.assignedTo.name === displayName);
+    const allCatSelected = dividing && selectable.length > 0 && selectable.every(it => pendingSelection.has(it.id));
     return /*#__PURE__*/React.createElement("div", {
       key: catName,
       style: {
@@ -4610,16 +4654,31 @@ function ShoppingTab({
         alignItems: "center",
         padding: "10px 14px",
         background: THEME.borderSoft,
-        cursor: "pointer"
+        cursor: "pointer",
+        gap: 8
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontFamily: "'Fraunces', serif",
         fontWeight: 700,
         fontSize: 15,
-        color: THEME.oliveDark
+        color: THEME.oliveDark,
+        flex: 1
       }
-    }, catOpen ? "▼" : "▶", " ", catName), /*#__PURE__*/React.createElement("span", {
+    }, catOpen ? "▼" : "▶", " ", catName), dividing && selectable.length > 0 && /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        fontSize: 11,
+        background: allCatSelected ? THEME.saffron : "#fff",
+        color: allCatSelected ? "#fff" : THEME.inkSoft,
+        border: `1px solid ${THEME.border}`,
+        padding: "3px 8px"
+      },
+      onClick: e => {
+        e.stopPropagation();
+        toggleCategorySelect(items);
+      }
+    }, allCatSelected ? "Quitar categoría" : "Marcar categoría"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
         color: THEME.inkSoft
@@ -4635,11 +4694,12 @@ function ShoppingTab({
     }, items.map((it, i) => {
       const open = openItem === it.id;
       const selected = pendingSelection.has(it.id);
+      const claimedByOther = it.assignedTo && it.assignedTo.name !== displayName;
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
         style: {
           background: it.checked ? "#F3EFE0" : THEME.card,
-          border: `1px solid ${THEME.border}`,
+          border: `1px solid ${claimedByOther && dividing ? THEME.tomato : THEME.border}`,
           borderRadius: 10,
           overflow: "hidden"
         }
@@ -4668,7 +4728,7 @@ function ShoppingTab({
           width: 20,
           height: 20,
           borderRadius: "50%",
-          border: `2px solid ${THEME.saffronDark}`,
+          border: `2px solid ${claimedByOther ? THEME.tomato : THEME.saffronDark}`,
           background: selected ? THEME.saffron : "#fff",
           display: "flex",
           alignItems: "center",
@@ -4718,12 +4778,12 @@ function ShoppingTab({
           color: it.checked && !dividing ? THEME.inkSoft : THEME.ink,
           fontSize: 14
         }
-      }, it.name), !dividing && it.assignedTo && /*#__PURE__*/React.createElement("span", {
+      }, it.name), it.assignedTo && /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
-          color: THEME.saffronDark
+          color: claimedByOther ? THEME.tomatoDark : THEME.saffronDark
         }
-      }, "🛍️ Compra: ", it.assignedTo.name)), /*#__PURE__*/React.createElement("span", {
+      }, "🛍️ ", dividing ? claimedByOther ? `Ya asignado a ${it.assignedTo.name}` : "Asignado a ti" : `Compra: ${it.assignedTo.name}`)), /*#__PURE__*/React.createElement("span", {
         style: {
           fontWeight: 600,
           fontSize: 13,
