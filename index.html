@@ -97,6 +97,150 @@ const THEME = {
 function uid(prefix) {
   return prefix + Math.random().toString(36).slice(2, 9);
 }
+
+// ---- Fusión segura para evitar que dos guardados casi simultáneos se pisen ----
+// En vez de reemplazar el bloque entero guardado en Supabase, cada guardado trae
+// primero la copia más reciente del servidor y aplica solo el cambio concreto
+// que ha hecho esta persona, dejando intactos los cambios de las demás.
+
+function diffArrayById(oldArr, newArr, keyFn) {
+  const key = keyFn || (x => x.id);
+  const oldMap = new Map((oldArr || []).map(x => [key(x), x]));
+  const newMap = new Map((newArr || []).map(x => [key(x), x]));
+  const addedItems = [];
+  const changedFields = [];
+  const removedKeys = [];
+  for (const [k, newItem] of newMap) {
+    const oldItem = oldMap.get(k);
+    if (!oldItem) {
+      addedItems.push(newItem);
+      continue;
+    }
+    if (oldItem === newItem) continue;
+    const fields = {};
+    let changed = false;
+    const fieldKeys = new Set([...Object.keys(oldItem), ...Object.keys(newItem)]);
+    for (const fk of fieldKeys) {
+      if (JSON.stringify(oldItem[fk]) !== JSON.stringify(newItem[fk])) {
+        fields[fk] = newItem[fk];
+        changed = true;
+      }
+    }
+    if (changed) changedFields.push({
+      key: k,
+      fields
+    });
+  }
+  for (const [k] of oldMap) {
+    if (!newMap.has(k)) removedKeys.push(k);
+  }
+  return {
+    addedItems,
+    changedFields,
+    removedKeys
+  };
+}
+function applyDiffToFresh(freshArr, diff, keyFn) {
+  const key = keyFn || (x => x.id);
+  let arr = (freshArr || []).map(item => {
+    const c = diff.changedFields.find(c => c.key === key(item));
+    return c ? {
+      ...item,
+      ...c.fields
+    } : item;
+  });
+  const existingKeys = new Set(arr.map(key));
+  arr = [...arr, ...diff.addedItems.filter(a => !existingKeys.has(key(a)))];
+  arr = arr.filter(item => !diff.removedKeys.includes(key(item)));
+  return arr;
+}
+
+// Fusiona una colección plana con id propio (familias, ingredientes, items de lista...)
+function mergeCollection(freshArr, oldArr, newArr, keyFn) {
+  const diff = diffArrayById(oldArr, newArr, keyFn);
+  return applyDiffToFresh(freshArr, diff, keyFn);
+}
+
+// Fusiona una colección anidada a 2 niveles (ej. tipos de inventario -> items; encargos -> asignados)
+function mergeNestedCollection(freshArr, oldArr, newArr, nestedKeyField, nestedItemKeyFn) {
+  const topDiff = diffArrayById(oldArr, newArr);
+  let arr = (freshArr || []).map(freshTop => {
+    const c = topDiff.changedFields.find(c => c.key === freshTop.id);
+    if (!c) return freshTop;
+    const patch = {
+      ...c.fields
+    };
+    if (nestedKeyField in patch) {
+      const oldTop = (oldArr || []).find(t => t.id === freshTop.id);
+      const newTop = (newArr || []).find(t => t.id === freshTop.id);
+      const nestedDiff = diffArrayById(oldTop ? oldTop[nestedKeyField] : [], newTop ? newTop[nestedKeyField] : [], nestedItemKeyFn);
+      patch[nestedKeyField] = applyDiffToFresh(freshTop[nestedKeyField], nestedDiff, nestedItemKeyFn);
+    }
+    return {
+      ...freshTop,
+      ...patch
+    };
+  });
+  const existingIds = new Set(arr.map(t => t.id));
+  arr = [...arr, ...topDiff.addedItems.filter(a => !existingIds.has(a.id))];
+  arr = arr.filter(t => !topDiff.removedKeys.includes(t.id));
+  return arr;
+}
+
+// Fusiona history: años -> categorías -> items (3 niveles)
+function mergeHistoryData(freshArr, oldArr, newArr) {
+  const topDiff = diffArrayById(oldArr, newArr);
+  let arr = (freshArr || []).map(freshYear => {
+    const c = topDiff.changedFields.find(c => c.key === freshYear.id);
+    if (!c) return freshYear;
+    const patch = {
+      ...c.fields
+    };
+    if ("categories" in patch) {
+      const oldYear = (oldArr || []).find(y => y.id === freshYear.id);
+      const newYear = (newArr || []).find(y => y.id === freshYear.id);
+      patch.categories = mergeNestedCollection(freshYear.categories, oldYear ? oldYear.categories : [], newYear ? newYear.categories : [], "items");
+    }
+    return {
+      ...freshYear,
+      ...patch
+    };
+  });
+  const existingIds = new Set(arr.map(y => y.id));
+  arr = [...arr, ...topDiff.addedItems.filter(a => !existingIds.has(a.id))];
+  arr = arr.filter(y => !topDiff.removedKeys.includes(y.id));
+  return arr;
+}
+
+// Fusiona el objeto de datos del club: campos sueltos = último en escribir gana,
+// colecciones con id = fusión por id, paymentStatus (diccionario) = fusión por clave.
+const CLUB_DATA_ID_COLLECTIONS = new Set(["ingredients", "categories", "supermarkets", "units"]);
+function mergeClubData(fresh, oldData, newData) {
+  const merged = {
+    ...(fresh || {})
+  };
+  for (const k of Object.keys(newData || {})) {
+    if (JSON.stringify((oldData || {})[k]) === JSON.stringify(newData[k])) continue; // esta acción no tocó este campo
+    if (CLUB_DATA_ID_COLLECTIONS.has(k)) {
+      merged[k] = mergeCollection(fresh ? fresh[k] : [], (oldData || {})[k], newData[k]);
+    } else if (k === "paymentStatus") {
+      const patch = {};
+      const oldPS = (oldData || {}).paymentStatus || {};
+      const newPS = newData.paymentStatus || {};
+      const keys = new Set([...Object.keys(oldPS), ...Object.keys(newPS)]);
+      for (const pk of keys) {
+        if (JSON.stringify(oldPS[pk]) !== JSON.stringify(newPS[pk])) patch[pk] = newPS[pk];
+      }
+      merged.paymentStatus = {
+        ...((fresh || {}).paymentStatus || {}),
+        ...patch
+      };
+    } else {
+      merged[k] = newData[k];
+    }
+  }
+  return merged;
+}
 function fmtQty(n) {
   const r = Math.round(n * 100) / 100;
   return String(r);
@@ -3493,38 +3637,55 @@ function App() {
     setPeople(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-people", next);
+      const fresh = (await storage.get("paella-people")) || [];
+      const merged = mergeCollection(fresh, people, next);
+      setPeople(merged);
+      await storage.set("paella-people", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar las familias.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [people]);
   const persistInventory = useCallback(async next => {
     setInventory(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-inventory", next);
+      const fresh = (await storage.get("paella-inventory")) || [];
+      const merged = mergeNestedCollection(fresh, inventory, next, "items");
+      setInventory(merged);
+      await storage.set("paella-inventory", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar el inventario.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [inventory]);
   const persistEncargos = useCallback(async next => {
     setEncargos(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-encargos", next);
+      const fresh = (await storage.get("paella-encargos")) || {
+        published: false,
+        tasks: []
+      };
+      const mergedTasks = mergeNestedCollection(fresh.tasks, encargos.tasks, next.tasks, "assigned", a => `${a.familyId}||${a.personKey}`);
+      const merged = {
+        ...fresh,
+        published: next.published,
+        tasks: mergedTasks
+      };
+      setEncargos(merged);
+      await storage.set("paella-encargos", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar los encargos.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [encargos]);
   const attemptLogin = (familyId, personKey, pin, isNew) => {
     if (!pin) return false;
     if (isNew) {
@@ -3578,35 +3739,54 @@ function App() {
     setData(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-club-data", next);
+      const fresh = (await storage.get("paella-club-data")) || {};
+      const merged = mergeClubData(fresh, data, next);
+      setData(merged);
+      await storage.set("paella-club-data", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar el cambio.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [data]);
   const persistShoppingList = useCallback(async next => {
     setShoppingList(next);
     try {
-      await storage.set("paella-shopping-list", next);
+      const fresh = await storage.get("paella-shopping-list");
+      if (!fresh || !shoppingList) {
+        setShoppingList(next);
+        await storage.set("paella-shopping-list", next);
+        return;
+      }
+      const mergedItems = mergeCollection(fresh.items, shoppingList.items, next.items);
+      const merged = {
+        ...fresh,
+        generatedAt: next.generatedAt || fresh.generatedAt,
+        items: mergedItems
+      };
+      setShoppingList(merged);
+      await storage.set("paella-shopping-list", merged);
     } catch {
       setError("No se ha podido guardar la lista de la compra.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [shoppingList]);
   const persistHistory = useCallback(async next => {
     setHistory(next);
     try {
       setSavingNote("Guardando…");
-      await storage.set("paella-history", next);
+      const fresh = (await storage.get("paella-history")) || [];
+      const merged = mergeHistoryData(fresh, history, next);
+      setHistory(merged);
+      await storage.set("paella-history", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar el historial.");
       setTimeout(() => setError(""), 2500);
     }
-  }, []);
+  }, [history]);
   const addYear = year => {
     const y = parseInt(year, 10);
     if (!y || history.some(h => h.year === y)) return;
