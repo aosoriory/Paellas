@@ -5405,18 +5405,16 @@ function HistoryTab({
       onClick: () => removeCategory(h.id, c.id)
     }, /*#__PURE__*/React.createElement(Icon, {
       size: 14
-    }, "🗑️"))), editMode ? /*#__PURE__*/React.createElement("input", {
-      className: "paella-input",
-      placeholder: "Nota general (ej. sobró muchísimo)",
-      value: c.note,
-      onChange: e => updateCategory(h.id, c.id, {
-        note: e.target.value
-      }),
+    }, "🗑️"))), editMode ? /*#__PURE__*/React.createElement("div", {
       style: {
-        marginBottom: 8,
-        fontSize: 12
+        marginBottom: 8
       }
-    }) : c.note && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement(ResultPicker, {
+      note: c.note,
+      onChange: note => updateCategory(h.id, c.id, {
+        note
+      })
+    })) : c.note && /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 6
       }
