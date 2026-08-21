@@ -2662,6 +2662,204 @@ const UNIT_RENAME = {
   "botes 870 gr": "botes",
   "lata 470 gr": "latas"
 };
+function apply2026Menu(d) {
+  if (d.menu2026Applied) return d;
+  const updates = {
+    i2: {
+      normalQty: 3,
+      currentQty: 1
+    },
+    i4: {
+      normalQty: 3,
+      currentQty: 1
+    },
+    i6: {
+      currentQty: 1
+    },
+    i8: {
+      normalQty: 6,
+      currentQty: 3
+    },
+    i9: {
+      normalQty: 12
+    },
+    i11: {
+      currentQty: 1
+    },
+    i12: {
+      currentQty: 1
+    },
+    i13: {
+      currentQty: 1
+    },
+    i14: {
+      name: "Medio pollo troceado (sin deshuesar)",
+      normalQty: 4
+    },
+    i17: {
+      normalQty: 3
+    },
+    i18: {
+      normalQty: 2,
+      unit: "paquetes"
+    },
+    i19: {
+      normalQty: 3
+    },
+    i20: {
+      normalQty: 4
+    },
+    i21: {
+      normalQty: 2
+    },
+    i22: {
+      normalQty: 2
+    },
+    i30: {
+      normalQty: 4
+    },
+    i31: {
+      normalQty: 10
+    },
+    i33: {
+      normalQty: 10
+    },
+    i34: {
+      normalQty: 6
+    },
+    i35: {
+      normalQty: 2
+    },
+    i37: {
+      normalQty: 5
+    },
+    i38: {
+      normalQty: 8
+    },
+    i39: {
+      normalQty: 4
+    },
+    i40: {
+      normalQty: 5
+    },
+    i41: {
+      normalQty: 3
+    },
+    i42: {
+      normalQty: 7
+    },
+    i43: {
+      normalQty: 5
+    },
+    i44: {
+      normalQty: 5
+    },
+    i45: {
+      normalQty: 4
+    },
+    i47: {
+      normalQty: 2
+    },
+    i48: {
+      normalQty: 2
+    },
+    i49: {
+      normalQty: 3
+    },
+    i51: {
+      normalQty: 80
+    },
+    i52: {
+      normalQty: 50
+    },
+    i54: {
+      normalQty: 30
+    },
+    i56: {
+      currentQty: 200
+    },
+    i63: {
+      categoryId: "c8",
+      name: "Conguitos",
+      normalQty: 4
+    },
+    i64: {
+      normalQty: 12
+    },
+    i66: {
+      normalQty: 2
+    },
+    i67: {
+      name: "Chocolate negro para postres",
+      unit: "tabletas",
+      normalQty: 2
+    }
+  };
+  const newOnes = [{
+    id: uid("i"),
+    categoryId: "c1",
+    name: "Contramuslo de pollo deshuesado",
+    unit: "bandejas",
+    normalQty: 6,
+    currentQty: 0,
+    supermarketId: "",
+    imageUrl: ""
+  }, {
+    id: uid("i"),
+    categoryId: "c2",
+    name: "Sprite 2L",
+    unit: "botellas",
+    normalQty: 3,
+    currentQty: 0,
+    supermarketId: "",
+    imageUrl: ""
+  }, {
+    id: uid("i"),
+    categoryId: "c2",
+    name: "Limón exprimido (Mercadona)",
+    unit: "botes",
+    normalQty: 1,
+    currentQty: 0,
+    supermarketId: "s1",
+    imageUrl: ""
+  }, {
+    id: uid("i"),
+    categoryId: "c5",
+    name: "Cerveza Águila 0,0 sin filtrar",
+    unit: "botellas",
+    normalQty: 6,
+    currentQty: 0,
+    supermarketId: "",
+    imageUrl: ""
+  }, {
+    id: uid("i"),
+    categoryId: "c7",
+    name: "Aquarius de naranja",
+    unit: "botellas",
+    normalQty: 2,
+    currentQty: 0,
+    supermarketId: "",
+    imageUrl: ""
+  }, {
+    id: uid("i"),
+    categoryId: "c8",
+    name: "Chuches",
+    unit: "bolsas",
+    normalQty: 4,
+    currentQty: 0,
+    supermarketId: "",
+    imageUrl: ""
+  }];
+  const ingredients = d.ingredients.map(ing => updates[ing.id] ? {
+    ...ing,
+    ...updates[ing.id]
+  } : ing).concat(newOnes);
+  return {
+    ...d,
+    ingredients,
+    menu2026Applied: true
+  };
+}
 function normalizeUnits(d) {
   let changed = false;
   const ingredients = (d.ingredients || []).map(ing => {
@@ -2799,6 +2997,7 @@ function App() {
         gastosOpen: true,
         paymentStatus: {}
       };
+      d = apply2026Menu(d);
       needsSave = true;
     } else {
       const migrated = migrateData(d);
@@ -2846,6 +3045,11 @@ function App() {
           ...d,
           paymentStatus: {}
         };
+        needsSave = true;
+      }
+      const menuUpdated = apply2026Menu(d);
+      if (menuUpdated !== d) {
+        d = menuUpdated;
         needsSave = true;
       }
       const normalized = normalizeUnits(d);
