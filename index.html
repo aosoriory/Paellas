@@ -2497,7 +2497,6 @@ function App() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [confirmRegen, setConfirmRegen] = useState(false);
   const [savingNote, setSavingNote] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState("");
   const loadAllData = useCallback(async () => {
@@ -2990,8 +2989,12 @@ function App() {
   });
   const categoryName = id => (data?.categories || []).find(c => c.id === id)?.name || "";
   const doGenerate = () => {
+    const prevItems = shoppingList ? shoppingList.items : [];
+    const prevById = new Map(prevItems.map(it => [it.id, it]));
     const items = data.ingredients.map(ing => {
       const need = Math.max(0, (Number(ing.normalQty) || 0) - (Number(ing.currentQty) || 0));
+      const satisfied = need <= 0;
+      const prev = prevById.get(ing.id);
       return {
         id: ing.id,
         name: ing.name || "(sin nombre)",
@@ -3004,18 +3007,14 @@ function App() {
         normalQty: ing.normalQty,
         currentQty: ing.currentQty,
         imageUrl: ing.imageUrl,
-        checked: false
+        checked: satisfied ? true : prev ? prev.checked : false,
+        assignedTo: satisfied ? null : prev ? prev.assignedTo || null : null
       };
-    }).filter(it => it.qty > 0);
+    });
     persistShoppingList({
       generatedAt: new Date().toISOString(),
       items
     });
-    setConfirmRegen(false);
-    setTab("shopping");
-  };
-  const requestGenerate = () => {
-    if (shoppingList && shoppingList.items.length > 0) setConfirmRegen(true);else doGenerate();
   };
   const toggleCheck = itemId => persistShoppingList({
     ...shoppingList,
@@ -3039,17 +3038,22 @@ function App() {
     return Array.from(map.entries());
   }, [shoppingList]);
   const progress = useMemo(() => {
-    if (!shoppingList || shoppingList.items.length === 0) return {
+    if (!shoppingList) return {
       done: 0,
       total: 0,
       pct: 0
     };
-    const total = shoppingList.items.length,
-      done = shoppingList.items.filter(i => i.checked).length;
+    const needed = shoppingList.items.filter(i => i.qty > 0);
+    if (needed.length === 0) return {
+      done: 0,
+      total: 0,
+      pct: 0
+    };
+    const done = needed.filter(i => i.checked).length;
     return {
       done,
-      total,
-      pct: Math.round(done / total * 100)
+      total: needed.length,
+      pct: Math.round(done / needed.length * 100)
     };
   }, [shoppingList]);
   if (loading || !people || !inventory) return /*#__PURE__*/React.createElement("div", {
@@ -3224,14 +3228,6 @@ function App() {
   }, "📝"), " Inscripción"), /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
-      background: tab === "ingredients" ? THEME.saffron : "#fff",
-      color: tab === "ingredients" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "ingredients" ? THEME.saffron : THEME.border}`
-    },
-    onClick: () => setTab("ingredients")
-  }, "Ingredientes"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
       background: tab === "shopping" ? THEME.saffron : "#fff",
       color: tab === "shopping" ? "#fff" : THEME.ink,
       border: `1px solid ${tab === "shopping" ? THEME.saffron : THEME.border}`
@@ -3293,16 +3289,7 @@ function App() {
       margin: "0 auto",
       padding: "18px 20px 60px"
     }
-  }, tab === "ingredients" && /*#__PURE__*/React.createElement(IngredientsTab, {
-    data: data,
-    updateIngredient: updateIngredient,
-    addIngredient: addIngredient,
-    removeIngredient: removeIngredient,
-    moveIngredient: moveIngredient,
-    onGenerate: requestGenerate,
-    history: history,
-    readOnly: !perms.canManageIngredients
-  }), tab === "options" && perms.canManageOptions && /*#__PURE__*/React.createElement(OptionsTab, {
+  }, tab === "options" && perms.canManageOptions && /*#__PURE__*/React.createElement(OptionsTab, {
     supermarkets: data.supermarkets,
     addSupermarket: addSupermarket,
     removeSupermarket: removeSupermarket,
@@ -3322,18 +3309,24 @@ function App() {
     removeUnit: removeUnit,
     renameUnit: renameUnit,
     moveUnit: moveUnit
-  }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingTab, {
+  }), tab === "shopping" && /*#__PURE__*/React.createElement(ShoppingSection, {
     shoppingList: shoppingList,
     grouped: grouped,
     progress: progress,
     toggleCheck: toggleCheck,
-    onGenerate: requestGenerate,
+    onGenerate: doGenerate,
     setLightboxUrl: setLightboxUrl,
     moveShoppingItem: moveShoppingItem,
     canToggle: perms.canToggleShopping,
     canManage: perms.canManageIngredients,
     displayName: displayName,
-    persistShoppingList: persistShoppingList
+    persistShoppingList: persistShoppingList,
+    history: history,
+    data: data,
+    updateIngredient: updateIngredient,
+    addIngredient: addIngredient,
+    removeIngredient: removeIngredient,
+    moveIngredient: moveIngredient
   }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
     history: history,
     addYear: addYear,
@@ -3398,57 +3391,7 @@ function App() {
       borderRadius: 20,
       opacity: 0.9
     }
-  }, savingNote), confirmRegen && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(44,34,22,0.45)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#fff",
-      borderRadius: 14,
-      padding: 22,
-      maxWidth: 360,
-      width: "100%"
-    }
-  }, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      fontFamily: "'Fraunces', serif",
-      margin: "0 0 8px",
-      fontSize: 18
-    }
-  }, "¿Generar de nuevo?"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 14,
-      color: THEME.inkSoft,
-      margin: "0 0 18px"
-    }
-  }, "Ya tienes una lista con ", shoppingList?.items.filter(i => i.checked).length || 0, " de ", shoppingList?.items.length || 0, " cosas marcadas. Si generas otra vez, se sustituirá."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: "#fff",
-      border: `1px solid ${THEME.border}`
-    },
-    onClick: () => setConfirmRegen(false)
-  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: THEME.tomato,
-      color: "#fff"
-    },
-    onClick: doGenerate
-  }, "Sí, generar de nuevo")))), lightboxUrl && /*#__PURE__*/React.createElement("div", {
+  }, savingNote), lightboxUrl && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -3754,7 +3697,7 @@ function IngredientsTab({
       fontSize: 15
     },
     onClick: onGenerate
-  }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"), historyFor && /*#__PURE__*/React.createElement(IngredientHistoryModal, {
+  }, /*#__PURE__*/React.createElement(Icon, null, "💾"), " Guardar"), historyFor && /*#__PURE__*/React.createElement(IngredientHistoryModal, {
     ing: historyFor,
     history: history,
     onClose: () => setHistoryFor(null)
@@ -4342,6 +4285,37 @@ function PaellaDial({
     }
   }, total - done, " cosas por comprar")));
 }
+function ShoppingSection(props) {
+  const [editMode, setEditMode] = useState(false);
+  const handleSave = () => {
+    props.onGenerate();
+    setEditMode(false);
+  };
+  if (editMode) {
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(IngredientsTab, {
+      data: props.data,
+      updateIngredient: props.updateIngredient,
+      addIngredient: props.addIngredient,
+      removeIngredient: props.removeIngredient,
+      moveIngredient: props.moveIngredient,
+      onGenerate: handleSave,
+      history: props.history,
+      readOnly: false
+    }));
+  }
+  return /*#__PURE__*/React.createElement("div", null, props.canManage && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.ink,
+      marginBottom: 16
+    },
+    onClick: () => setEditMode(true)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "✏️"), " Editar lista"), /*#__PURE__*/React.createElement(ShoppingTab, props));
+}
 function ShoppingTab({
   shoppingList,
   grouped,
@@ -4353,9 +4327,11 @@ function ShoppingTab({
   canToggle,
   canManage,
   displayName,
-  persistShoppingList
+  persistShoppingList,
+  history
 }) {
   const [openItem, setOpenItem] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
   const [openCats, setOpenCats] = useState(() => new Set(grouped.map(([catName]) => catName)));
   const [dividing, setDividing] = useState(false);
   const [pendingSelection, setPendingSelection] = useState(new Set());
@@ -4390,15 +4366,7 @@ function ShoppingTab({
         color: THEME.inkSoft,
         margin: "0 0 18px"
       }
-    }, canManage ? "Ajusta las cantidades en Ingredientes y pulsa el botón para generar lo que hay que comprar este año." : "Todavía no se ha generado la lista de este año."), canManage && /*#__PURE__*/React.createElement("button", {
-      className: "tab-btn",
-      style: {
-        background: THEME.saffron,
-        color: "#fff",
-        margin: "0 auto"
-      },
-      onClick: onGenerate
-    }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"));
+    }, canManage ? "Toca \"Editar lista\" para añadir ingredientes y sus cantidades." : "Todavía no se ha creado la lista de este año."));
   }
   const isDivided = shoppingList.items.some(it => it.assignedTo);
   const assignees = Array.from(new Set(shoppingList.items.filter(it => it.assignedTo).map(it => it.assignedTo.name)));
@@ -4516,17 +4484,7 @@ function ShoppingTab({
     pct: progress.pct,
     done: progress.done,
     total: progress.total
-  }), canManage && /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: "#fff",
-      border: `1px solid ${THEME.border}`,
-      color: THEME.inkSoft
-    },
-    onClick: onGenerate
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 14
-  }, "↩️"), " Regenerar")), canToggle && !dividing && /*#__PURE__*/React.createElement("div", {
+  })), canToggle && !dividing && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -4830,13 +4788,15 @@ function ShoppingTab({
       const open = openItem === it.id;
       const selected = pendingSelection.has(it.id);
       const claimedByOther = it.assignedTo && it.assignedTo.name !== displayName;
+      const satisfied = it.qty === 0;
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
         style: {
-          background: it.checked ? "#F3EFE0" : THEME.card,
+          background: satisfied ? "#EFEBE0" : it.checked ? "#F3EFE0" : THEME.card,
           border: `1px solid ${claimedByOther && dividing ? THEME.tomato : THEME.border}`,
           borderRadius: 10,
-          overflow: "hidden"
+          overflow: "hidden",
+          opacity: satisfied ? 0.65 : 1
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4874,7 +4834,7 @@ function ShoppingTab({
         }
       }, selected && "🙋") : /*#__PURE__*/React.createElement("span", {
         onClick: e => {
-          if (canToggle) {
+          if (canToggle && !satisfied) {
             e.stopPropagation();
             toggleCheck(it.id);
           }
@@ -4883,8 +4843,8 @@ function ShoppingTab({
           width: 20,
           height: 20,
           borderRadius: 6,
-          border: `2px solid ${it.checked ? THEME.olive : THEME.saffronDark}`,
-          background: it.checked ? THEME.olive : "#fff",
+          border: `2px solid ${satisfied ? THEME.inkSoft : it.checked ? THEME.olive : THEME.saffronDark}`,
+          background: satisfied ? THEME.inkSoft : it.checked ? THEME.olive : "#fff",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -4892,7 +4852,7 @@ function ShoppingTab({
           fontSize: 12,
           color: "#fff"
         }
-      }, it.checked && "✓"), /*#__PURE__*/React.createElement("span", {
+      }, (satisfied || it.checked) && "✓"), /*#__PURE__*/React.createElement("span", {
         onClick: e => {
           if (it.imageUrl && !dividing) {
             e.stopPropagation();
@@ -4909,8 +4869,8 @@ function ShoppingTab({
       }, /*#__PURE__*/React.createElement("span", {
         style: {
           display: "block",
-          textDecoration: it.checked && !dividing ? "line-through" : "none",
-          color: it.checked && !dividing ? THEME.inkSoft : THEME.ink,
+          textDecoration: satisfied || it.checked && !dividing ? "line-through" : "none",
+          color: satisfied ? THEME.inkSoft : it.checked && !dividing ? THEME.inkSoft : THEME.ink,
           fontSize: 14
         }
       }, it.name), it.assignedTo && /*#__PURE__*/React.createElement("span", {
@@ -4922,7 +4882,7 @@ function ShoppingTab({
         style: {
           fontWeight: 600,
           fontSize: 13,
-          color: THEME.tomatoDark,
+          color: satisfied ? THEME.inkSoft : THEME.tomatoDark,
           whiteSpace: "nowrap"
         }
       }, fmtQty(it.qty), " ", it.unit)), open && !dividing && /*#__PURE__*/React.createElement("div", {
@@ -4932,7 +4892,7 @@ function ShoppingTab({
           color: THEME.inkSoft,
           display: "flex",
           flexDirection: "column",
-          gap: 3
+          gap: 5
         }
       }, /*#__PURE__*/React.createElement("span", null, "Habitual: ", /*#__PURE__*/React.createElement("strong", {
         style: {
@@ -4946,8 +4906,27 @@ function ShoppingTab({
         style: {
           color: THEME.ink
         }
-      }, it.supermarketName))));
+      }, it.supermarketName)), /*#__PURE__*/React.createElement("button", {
+        className: "tab-btn",
+        style: {
+          fontSize: 11.5,
+          background: "#fff",
+          border: `1px solid ${THEME.border}`,
+          padding: "3px 8px",
+          alignSelf: "flex-start"
+        },
+        onClick: e => {
+          e.stopPropagation();
+          setHistoryFor(it);
+        }
+      }, /*#__PURE__*/React.createElement(Icon, {
+        size: 13
+      }, "🕘"), " Historial")));
     })));
+  }), historyFor && /*#__PURE__*/React.createElement(IngredientHistoryModal, {
+    ing: historyFor,
+    history: history,
+    onClose: () => setHistoryFor(null)
   }));
 }
 function CloseYearModal({
