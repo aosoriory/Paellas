@@ -1308,7 +1308,9 @@ function effKids(f) {
 }
 function computeAccountTotals(people, childWeight) {
   const totalSpent = people.reduce((s, f) => s + familySpent(f), 0);
-  const totalParticipants = people.reduce((s, f) => s + effAdults(f) + effKids(f), 0);
+  const totalAdults = people.reduce((s, f) => s + effAdults(f), 0);
+  const totalKids = people.reduce((s, f) => s + effKids(f), 0);
+  const totalParticipants = totalAdults + totalKids;
   const totalWeighted = people.reduce((s, f) => s + effAdults(f) + effKids(f) * childWeight, 0);
   const costPerUnit = totalWeighted > 0 ? totalSpent / totalWeighted : 0;
   const costPerChild = costPerUnit * childWeight;
@@ -1326,6 +1328,8 @@ function computeAccountTotals(people, childWeight) {
   });
   return {
     totalSpent,
+    totalAdults,
+    totalKids,
     totalParticipants,
     totalWeighted,
     costPerUnit,
@@ -1344,7 +1348,7 @@ function ParticipantsSummary({
       marginBottom: 18,
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, totals.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))));
+  }, /*#__PURE__*/React.createElement("div", null, "Adultos: ", /*#__PURE__*/React.createElement("strong", null, totals.totalAdults)), /*#__PURE__*/React.createElement("div", null, "Niños: ", /*#__PURE__*/React.createElement("strong", null, totals.totalKids)), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, totals.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, totals.totalWeighted.toFixed(2))));
 }
 function InscripcionTab({
   people,
@@ -1598,6 +1602,8 @@ function AccountsTab({
     if (!y) return;
     saveYearAccounts(y, {
       totalSpent: totals.totalSpent,
+      totalAdults: totals.totalAdults,
+      totalKids: totals.totalKids,
       totalParticipants: totals.totalParticipants,
       totalWeighted: totals.totalWeighted,
       costPerUnit: totals.costPerUnit,
@@ -2046,9 +2052,19 @@ function InventoryItemRow({
   }, "🗑️"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 8
+      gap: 8,
+      alignItems: "center"
     }
-  }, canManageFully ? /*#__PURE__*/React.createElement("select", {
+  }, canManageFully ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, isCurrentHolder && /*#__PURE__*/React.createElement("span", {
+    title: "Está en tu casa"
+  }, "🙋"), /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.holderId,
     onChange: e => updateItem({
@@ -2063,7 +2079,7 @@ function InventoryItemRow({
   }, "Sin asignar"), families.map(f => /*#__PURE__*/React.createElement("option", {
     key: f.id,
     value: f.id
-  }, f.lastName || "(sin apellido)"))) : /*#__PURE__*/React.createElement("div", {
+  }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : "")))) : /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       display: "flex",
@@ -2087,7 +2103,7 @@ function InventoryItemRow({
     onClick: () => updateItem({
       holderId: session.familyId
     })
-  }, "La tengo yo ahora")), trackFullness && /*#__PURE__*/React.createElement("select", {
+  }, "🙋 La tengo yo ahora")), trackFullness && /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.fullness || "",
     disabled: !canManageFully,
@@ -4306,6 +4322,7 @@ function ShoppingTab({
   const [dividing, setDividing] = useState(false);
   const [pendingSelection, setPendingSelection] = useState(new Set());
   const [confirmItemId, setConfirmItemId] = useState(null); // item requiring "otro ya lo eligió" confirm
+  const [confirmCatItems, setConfirmCatItems] = useState(null); // array of items requiring confirm when marking a whole category
   const [confirmUndivide, setConfirmUndivide] = useState(false);
   const [viewFilter, setViewFilter] = useState("all");
   const toggleCat = catName => setOpenCats(prev => {
@@ -4355,6 +4372,7 @@ function ShoppingTab({
     setDividing(false);
     setPendingSelection(new Set());
     setConfirmItemId(null);
+    setConfirmCatItems(null);
   };
   const toggleSelect = it => {
     const alreadyMine = pendingSelection.has(it.id);
@@ -4378,13 +4396,33 @@ function ShoppingTab({
     setConfirmItemId(null);
   };
   const toggleCategorySelect = items => {
-    const selectable = items.filter(it => !it.assignedTo || it.assignedTo.name === displayName);
-    const allSelected = selectable.length > 0 && selectable.every(it => pendingSelection.has(it.id));
+    const allSelected = items.length > 0 && items.every(it => pendingSelection.has(it.id));
+    if (allSelected) {
+      setPendingSelection(prev => {
+        const next = new Set(prev);
+        items.forEach(it => next.delete(it.id));
+        return next;
+      });
+      return;
+    }
+    const toAddFree = items.filter(it => !pendingSelection.has(it.id) && (!it.assignedTo || it.assignedTo.name === displayName));
+    const toConfirm = items.filter(it => !pendingSelection.has(it.id) && it.assignedTo && it.assignedTo.name !== displayName);
+    if (toAddFree.length) {
+      setPendingSelection(prev => {
+        const next = new Set(prev);
+        toAddFree.forEach(it => next.add(it.id));
+        return next;
+      });
+    }
+    if (toConfirm.length) setConfirmCatItems(toConfirm);
+  };
+  const confirmOverrideCategory = () => {
     setPendingSelection(prev => {
       const next = new Set(prev);
-      selectable.forEach(it => allSelected ? next.delete(it.id) : next.add(it.id));
+      confirmCatItems.forEach(it => next.add(it.id));
       return next;
     });
+    setConfirmCatItems(null);
   };
   const confirmDivision = () => {
     const next = {
@@ -4520,7 +4558,7 @@ function ShoppingTab({
       color: THEME.inkSoft,
       margin: "0 0 10px"
     }
-  }, "⚠️ Esto NO los marca como comprados, solo indica quién va a por ellos. Lo que ya tiene 🛍️ con otro nombre ya está asignado a otra persona."), /*#__PURE__*/React.createElement("div", {
+  }, "⚠️ Esto NO los marca como comprados, solo indica quién va a por ellos. Lo que ya tiene 🙋 con otro nombre ya está asignado a otra persona."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -4634,10 +4672,65 @@ function ShoppingTab({
       },
       onClick: confirmOverrideItem
     }, "Confirmar"))));
-  })(), displayGrouped.map(([catName, items]) => {
+  })(), confirmCatItems && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44,34,22,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 50
+    },
+    onClick: () => setConfirmCatItems(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 20,
+      maxWidth: 380,
+      width: "100%",
+      maxHeight: "80vh",
+      overflowY: "auto"
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      margin: "0 0 10px"
+    }
+  }, "Estos productos ya los ha elegido otra persona. Antes de asignártelos tú, asegúrate de que estáis coordinados:"), /*#__PURE__*/React.createElement("ul", {
+    style: {
+      margin: "0 0 16px",
+      paddingLeft: 20,
+      fontSize: 13.5
+    }
+  }, confirmCatItems.map(it => /*#__PURE__*/React.createElement("li", {
+    key: it.id
+  }, it.name, " — ", /*#__PURE__*/React.createElement("strong", null, it.assignedTo.name)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => setConfirmCatItems(null)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff"
+    },
+    onClick: confirmOverrideCategory
+  }, "Confirmar")))), displayGrouped.map(([catName, items]) => {
     const catOpen = openCats.has(catName);
-    const selectable = items.filter(it => !it.assignedTo || it.assignedTo.name === displayName);
-    const allCatSelected = dividing && selectable.length > 0 && selectable.every(it => pendingSelection.has(it.id));
+    const allCatSelected = dividing && items.length > 0 && items.every(it => pendingSelection.has(it.id));
     return /*#__PURE__*/React.createElement("div", {
       key: catName,
       style: {
@@ -4650,14 +4743,31 @@ function ShoppingTab({
       onClick: () => toggleCat(catName),
       style: {
         display: "flex",
-        justifyContent: "space-between",
         alignItems: "center",
         padding: "10px 14px",
         background: THEME.borderSoft,
         cursor: "pointer",
         gap: 8
       }
-    }, /*#__PURE__*/React.createElement("span", {
+    }, dividing && /*#__PURE__*/React.createElement("span", {
+      onClick: e => {
+        e.stopPropagation();
+        toggleCategorySelect(items);
+      },
+      style: {
+        width: 20,
+        height: 20,
+        borderRadius: 6,
+        border: `2px solid ${THEME.saffronDark}`,
+        background: allCatSelected ? THEME.saffron : "#fff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        fontSize: 12,
+        color: "#fff"
+      }
+    }, allCatSelected && "✓"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontFamily: "'Fraunces', serif",
         fontWeight: 700,
@@ -4665,20 +4775,7 @@ function ShoppingTab({
         color: THEME.oliveDark,
         flex: 1
       }
-    }, catOpen ? "▼" : "▶", " ", catName), dividing && selectable.length > 0 && /*#__PURE__*/React.createElement("button", {
-      className: "tab-btn",
-      style: {
-        fontSize: 11,
-        background: allCatSelected ? THEME.saffron : "#fff",
-        color: allCatSelected ? "#fff" : THEME.inkSoft,
-        border: `1px solid ${THEME.border}`,
-        padding: "3px 8px"
-      },
-      onClick: e => {
-        e.stopPropagation();
-        toggleCategorySelect(items);
-      }
-    }, allCatSelected ? "Quitar categoría" : "Marcar categoría"), /*#__PURE__*/React.createElement("span", {
+    }, catOpen ? "▼" : "▶", " ", catName), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
         color: THEME.inkSoft
@@ -4737,7 +4834,7 @@ function ShoppingTab({
           fontSize: 12,
           color: "#fff"
         }
-      }, selected && "🛍️") : /*#__PURE__*/React.createElement("span", {
+      }, selected && "🙋") : /*#__PURE__*/React.createElement("span", {
         onClick: e => {
           if (canToggle) {
             e.stopPropagation();
@@ -4783,7 +4880,7 @@ function ShoppingTab({
           fontSize: 11,
           color: claimedByOther ? THEME.tomatoDark : THEME.saffronDark
         }
-      }, "🛍️ ", dividing ? claimedByOther ? `Ya asignado a ${it.assignedTo.name}` : "Asignado a ti" : `Compra: ${it.assignedTo.name}`)), /*#__PURE__*/React.createElement("span", {
+      }, "🙋 ", dividing ? claimedByOther ? `Ya asignado a ${it.assignedTo.name}` : "Asignado a ti" : `Compra: ${it.assignedTo.name}`)), /*#__PURE__*/React.createElement("span", {
         style: {
           fontWeight: 600,
           fontSize: 13,
@@ -5254,7 +5351,7 @@ function HistoryTab({
         marginBottom: 4,
         fontFamily: "'Fraunces', serif"
       }
-    }, "💶 Cuentas de este año"), /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerChild.toFixed(2), " €"))), h.categories.map(c => /*#__PURE__*/React.createElement("div", {
+    }, "💶 Cuentas de este año"), h.accounts.totalAdults !== undefined && /*#__PURE__*/React.createElement("div", null, "Adultos: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalAdults)), h.accounts.totalKids !== undefined && /*#__PURE__*/React.createElement("div", null, "Niños: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalKids)), /*#__PURE__*/React.createElement("div", null, "Gasto total: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalSpent.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Participantes totales: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalParticipants)), /*#__PURE__*/React.createElement("div", null, "Participantes (ponderados): ", /*#__PURE__*/React.createElement("strong", null, h.accounts.totalWeighted.toFixed(2))), /*#__PURE__*/React.createElement("div", null, "Coste por adulto: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerUnit.toFixed(2), " €")), /*#__PURE__*/React.createElement("div", null, "Coste por niño: ", /*#__PURE__*/React.createElement("strong", null, h.accounts.costPerChild.toFixed(2), " €"))), h.categories.map(c => /*#__PURE__*/React.createElement("div", {
       key: c.id,
       style: {
         marginBottom: 14
