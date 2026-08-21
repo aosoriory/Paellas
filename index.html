@@ -2119,7 +2119,7 @@ function AccountsTab({
       flexDirection: "column",
       gap: 6
     }
-  }, transfers.map((t, i) => {
+  }, [...transfers].sort((a, b) => a.from.localeCompare(b.from, "es")).map((t, i) => {
     const key = transferKey(t.from, t.to);
     const st = paymentStatus[key] || {};
     return /*#__PURE__*/React.createElement("div", {
@@ -2408,6 +2408,82 @@ function MaterialTypeCard({
     onClick: () => addInventoryItem(type.id)
   }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ", type.name.toLowerCase()));
 }
+function StorageTab({
+  people,
+  persistPeople,
+  session,
+  isAdmin,
+  canToggle
+}) {
+  const [editingId, setEditingId] = useState(null);
+  const sorted = useMemo(() => sortFamiliesDisplay(people), [people]);
+  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
+    ...f,
+    ...patch
+  } : f));
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "El día de la paella, los compradores reparten la compra entre las casas para guardarla hasta la noche. Cada familia (o un Comprador, o el Admin) apunta aquí qué guarda."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, sorted.map(f => {
+    const canEdit = isAdmin || canToggle || f.id === session.familyId;
+    const editing = editingId === f.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      style: {
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontFamily: "'Fraunces', serif"
+      }
+    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), canEdit && /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        fontSize: 11.5,
+        background: "#fff",
+        border: `1px solid ${THEME.border}`,
+        padding: "3px 8px"
+      },
+      onClick: () => setEditingId(editing ? null : f.id)
+    }, editing ? "▼ Listo" : "▶ Editar")), editing ? /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      placeholder: "Ej. latas, botellas y pollo",
+      value: f.storageNote || "",
+      onChange: e => updateFamily(f.id, {
+        storageNote: e.target.value
+      }),
+      style: {
+        fontSize: 13.5
+      }
+    }) : /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: 0,
+        fontSize: 13.5,
+        color: f.storageNote ? THEME.ink : THEME.inkSoft
+      }
+    }, f.storageNote || "Sin indicar"));
+  })));
+}
 function InventoryTab({
   inventory,
   persistInventory,
@@ -2484,6 +2560,59 @@ function InventoryTab({
     },
     onClick: addMaterialType
   }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")));
+}
+function GuardadoTab({
+  people,
+  persistPeople,
+  session,
+  canManageStorage
+}) {
+  const sorted = useMemo(() => sortFamiliesDisplay(people), [people]);
+  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
+    ...f,
+    ...patch
+  } : f));
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, "El día de la paella, los compradores reparten lo comprado entre las casas para guardarlo hasta la noche. Aquí se apunta qué guarda cada una."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, sorted.map(f => {
+    const canEdit = canManageStorage || f.id === session.familyId;
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      style: {
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontFamily: "'Fraunces', serif",
+        marginBottom: 6
+      }
+    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("input", {
+      className: "paella-input",
+      placeholder: "Ej. latas, botellas y pollo",
+      value: f.stored || "",
+      disabled: !canEdit,
+      onChange: e => updateFamily(f.id, {
+        stored: e.target.value
+      }),
+      style: {
+        opacity: canEdit ? 1 : 0.6
+      }
+    }));
+  })));
 }
 function AdminTab({
   people,
@@ -3749,6 +3878,16 @@ function App() {
     icon: "🛢️",
     label: "Inventario",
     onClick: () => setTab("inventory")
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "storage",
+    icon: "🏠",
+    label: "Guardado",
+    onClick: () => setTab("storage")
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "guardado",
+    icon: "🏠",
+    label: "Guardado",
+    onClick: () => setTab("guardado")
   }), perms.canManageOptions && /*#__PURE__*/React.createElement(NavItem, {
     active: tab === "options",
     icon: "⚙️",
@@ -3826,6 +3965,17 @@ function App() {
     people: people,
     session: effectiveSession,
     canManage: perms.canManageIngredients
+  }), tab === "storage" && /*#__PURE__*/React.createElement(StorageTab, {
+    people: people,
+    persistPeople: persistPeople,
+    session: effectiveSession,
+    isAdmin: perms.isAdmin,
+    canToggle: perms.canToggleShopping
+  }), tab === "guardado" && /*#__PURE__*/React.createElement(GuardadoTab, {
+    people: people,
+    persistPeople: persistPeople,
+    session: effectiveSession,
+    canManageStorage: perms.canToggleShopping
   }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
     people: people,
     persistPeople: persistPeople,
@@ -4084,6 +4234,8 @@ function IngredientsTab({
     next.has(key) ? next.delete(key) : next.add(key);
     return next;
   });
+  const allGroupsOpen = groups.length > 0 && groups.every(([catId]) => openGroups.has(catId));
+  const toggleAllGroups = () => setOpenGroups(allGroupsOpen ? new Set() : new Set(groups.map(([catId]) => catId)));
   const catName = id => categories.find(c => c.id === id)?.name || "Sin categoría";
   const [historyFor, setHistoryFor] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -4097,18 +4249,32 @@ function IngredientsTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cantidad habitual = lo que hace falta un año normal. Tenemos = lo que ya guardáis."), !readOnly && /*#__PURE__*/React.createElement("button", {
+  }, "Cantidad habitual = lo que hace falta un año normal. Tenemos = lo que ya guardáis."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14,
+      flexWrap: "wrap"
+    }
+  }, !readOnly && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: "#fff",
       border: `1px solid ${THEME.border}`,
-      color: THEME.inkSoft,
-      marginBottom: 14
+      color: THEME.inkSoft
     },
     onClick: () => setConfirmReset(true)
   }, /*#__PURE__*/React.createElement(Icon, {
     size: 14
-  }, "🔄"), " Resetear lo que tenemos"), groups.map(([catId, items]) => {
+  }, "🔄"), " Resetear lo que tenemos"), groups.length > 0 && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.inkSoft
+    },
+    onClick: toggleAllGroups
+  }, allGroupsOpen ? "▲ Contraer todas" : "▼ Expandir todas")), groups.map(([catId, items]) => {
     const open = openGroups.has(catId);
     const label = catName(catId);
     return /*#__PURE__*/React.createElement("div", {
@@ -5015,6 +5181,8 @@ function ShoppingTab({
     return it.assignedTo?.name === viewFilter;
   };
   const displayGrouped = grouped.map(([catName, items]) => [catName, items.filter(matchesFilter)]).filter(([, items]) => items.length > 0);
+  const allCatsOpen = displayGrouped.length > 0 && displayGrouped.every(([catName]) => openCats.has(catName));
+  const toggleAllCats = () => setOpenCats(allCatsOpen ? new Set() : new Set(displayGrouped.map(([catName]) => catName)));
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.card,
@@ -5082,7 +5250,19 @@ function ShoppingTab({
   }, "Sin asignar"), assignees.map(name => /*#__PURE__*/React.createElement("option", {
     key: name,
     value: name
-  }, "Productos de ", name)))), dividing && /*#__PURE__*/React.createElement("div", {
+  }, "Productos de ", name)))), displayGrouped.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.inkSoft
+    },
+    onClick: toggleAllCats
+  }, allCatsOpen ? "▲ Contraer todas" : "▼ Expandir todas")), dividing && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF8E8",
       border: `1px solid ${THEME.saffron}`,
