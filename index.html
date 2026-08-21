@@ -2480,6 +2480,45 @@ function migrateData(d) {
     categories
   };
 }
+function NavItem({
+  active,
+  icon,
+  label,
+  onClick,
+  danger
+}) {
+  const activeBg = danger ? THEME.tomato : THEME.oliveDark;
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    style: {
+      flex: "1 1 0",
+      minWidth: 64,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 3,
+      padding: "8px 4px",
+      background: active ? activeBg : "transparent",
+      border: "none",
+      borderRadius: 10,
+      cursor: "pointer",
+      color: active ? "#fff" : THEME.inkSoft
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 20,
+      lineHeight: 1
+    }
+  }, icon), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      fontWeight: active ? 700 : 500,
+      textAlign: "center",
+      lineHeight: 1.1
+    }
+  }, label));
+}
 function App() {
   const [data, setData] = useState(null);
   const [shoppingList, setShoppingList] = useState(null);
@@ -3210,80 +3249,51 @@ function App() {
     style: {
       maxWidth: 720,
       margin: "0 auto",
-      padding: "0 20px",
+      padding: "0 12px",
       display: "flex",
-      gap: 8,
-      flexWrap: "wrap"
+      gap: 2,
+      background: THEME.card,
+      borderRadius: 12,
+      border: `1px solid ${THEME.border}`,
+      overflowX: "auto"
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "inscripcion" ? THEME.saffron : "#fff",
-      color: tab === "inscripcion" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "inscripcion" ? THEME.saffron : THEME.border}`
-    },
+  }, /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "inscripcion",
+    icon: "📝",
+    label: "Inscripción",
     onClick: () => setTab("inscripcion")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "📝"), " Inscripción"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "shopping" ? THEME.saffron : "#fff",
-      color: tab === "shopping" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "shopping" ? THEME.saffron : THEME.border}`
-    },
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "shopping",
+    icon: "🛒",
+    label: "Lista",
     onClick: () => setTab("shopping")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "🛒"), " Lista de la compra"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "accounts" ? THEME.saffron : "#fff",
-      color: tab === "accounts" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "accounts" ? THEME.saffron : THEME.border}`
-    },
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "accounts",
+    icon: "💶",
+    label: "Cuentas",
     onClick: () => setTab("accounts")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "💶"), " Cuentas"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "history" ? THEME.saffron : "#fff",
-      color: tab === "history" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "history" ? THEME.saffron : THEME.border}`
-    },
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "history",
+    icon: "🕘",
+    label: "Historial",
     onClick: () => setTab("history")
-  }, "Historial"), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "inventory" ? THEME.saffron : "#fff",
-      color: tab === "inventory" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "inventory" ? THEME.saffron : THEME.border}`
-    },
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "inventory",
+    icon: "📦",
+    label: "Inventario",
     onClick: () => setTab("inventory")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "📦"), " Inventario"), perms.canManageOptions && /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "options" ? THEME.saffron : "#fff",
-      color: tab === "options" ? "#fff" : THEME.ink,
-      border: `1px solid ${tab === "options" ? THEME.saffron : THEME.border}`
-    },
+  }), perms.canManageOptions && /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "options",
+    icon: "⚙️",
+    label: "Opciones",
     onClick: () => setTab("options")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "⚙️"), " Opciones"), perms.isAdmin && /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      background: tab === "admin" ? THEME.tomato : "#fff",
-      color: tab === "admin" ? "#fff" : THEME.tomatoDark,
-      border: `1px solid ${tab === "admin" ? THEME.tomato : THEME.border}`
-    },
-    onClick: () => setTab("admin")
-  }, /*#__PURE__*/React.createElement(Icon, {
-    size: 15
-  }, "🔑"), " Admin")), /*#__PURE__*/React.createElement("main", {
+  }), perms.isAdmin && /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "admin",
+    icon: "🔑",
+    label: "Admin",
+    onClick: () => setTab("admin"),
+    danger: true
+  })), /*#__PURE__*/React.createElement("main", {
     style: {
       maxWidth: 720,
       margin: "0 auto",
