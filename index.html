@@ -1909,16 +1909,16 @@ function AccountsTab({
       marginBottom: 12,
       lineHeight: 1.5
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: THEME.oliveDark
     }
-  }, "✅"), " = quien paga ha marcado el pago como hecho. ", /*#__PURE__*/React.createElement("span", {
+  }, "✅"), " = quien paga ha marcado el pago como hecho."), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: THEME.oliveDark,
       fontWeight: 700
     }
-  }, "✅✅"), " = quien cobra ha confirmado que lo recibió."), allSettled && /*#__PURE__*/React.createElement("div", {
+  }, "✅✅"), " = quien cobra ha confirmado que lo recibió.")), allSettled && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#E9F2E0",
       border: `1px solid ${THEME.olive}`,
@@ -2035,7 +2035,7 @@ function AccountsTab({
         onClick: () => updatePaymentStatus(key, {
           paid: true
         })
-      }, "Pago hecho") : null);
+      }, "Pagado") : null);
     })), owedToMe.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5
@@ -2088,7 +2088,7 @@ function AccountsTab({
         onClick: () => updatePaymentStatus(key, {
           confirmed: true
         })
-      }, "Confirmar")));
+      }, "Recibido")));
     })));
   })), allSettled && /*#__PURE__*/React.createElement("div", {
     style: {
