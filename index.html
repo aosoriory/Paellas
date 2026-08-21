@@ -2725,7 +2725,7 @@ function StorageTab({
       }
     }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : "")), canEdit ? /*#__PURE__*/React.createElement("input", {
       className: "paella-input",
-      placeholder: "Ej. latas, botellas y pollo",
+      placeholder: "-",
       value: f.storageNote || "",
       onChange: e => updateFamily(f.id, {
         storageNote: e.target.value
@@ -2741,7 +2741,7 @@ function StorageTab({
         fontWeight: hasNote ? 600 : 400,
         color: hasNote ? THEME.ink : THEME.inkSoft
       }
-    }, f.storageNote || "Sin indicar"));
+    }, f.storageNote || "-"));
   })));
 }
 function InventoryTab({
@@ -2820,59 +2820,6 @@ function InventoryTab({
     },
     onClick: addMaterialType
   }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")));
-}
-function GuardadoTab({
-  people,
-  persistPeople,
-  session,
-  canManageStorage
-}) {
-  const sorted = useMemo(() => sortFamiliesDisplay(people), [people]);
-  const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
-    ...f,
-    ...patch
-  } : f));
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 13,
-      color: THEME.inkSoft,
-      marginTop: 0
-    }
-  }, "El día de la paella, los compradores reparten lo comprado entre las casas para guardarlo hasta la noche. Aquí se apunta qué guarda cada una."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, sorted.map(f => {
-    const canEdit = canManageStorage || f.id === session.familyId;
-    return /*#__PURE__*/React.createElement("div", {
-      key: f.id,
-      style: {
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 10,
-        padding: 10
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        fontFamily: "'Fraunces', serif",
-        marginBottom: 6
-      }
-    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("input", {
-      className: "paella-input",
-      placeholder: "Ej. latas, botellas y pollo",
-      value: f.stored || "",
-      disabled: !canEdit,
-      onChange: e => updateFamily(f.id, {
-        stored: e.target.value
-      }),
-      style: {
-        opacity: canEdit ? 1 : 0.6
-      }
-    }));
-  })));
 }
 function AdminTab({
   people,
@@ -4146,20 +4093,10 @@ function App() {
     label: "Lista",
     onClick: () => setTab("shopping")
   }), /*#__PURE__*/React.createElement(NavItem, {
-    active: tab === "accounts",
-    icon: "💶",
-    label: "Cuentas",
-    onClick: () => setTab("accounts")
-  }), /*#__PURE__*/React.createElement(NavItem, {
     active: tab === "history",
     icon: "🕘",
     label: "Historial",
     onClick: () => setTab("history")
-  }), /*#__PURE__*/React.createElement(NavItem, {
-    active: tab === "inventory",
-    icon: "🛢️",
-    label: "Inventario",
-    onClick: () => setTab("inventory")
   }), /*#__PURE__*/React.createElement(NavItem, {
     active: tab === "storage",
     icon: "🏠",
@@ -4170,6 +4107,16 @@ function App() {
     icon: "📋",
     label: "Encargos",
     onClick: () => setTab("encargos")
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "inventory",
+    icon: "🛢️",
+    label: "Inventario",
+    onClick: () => setTab("inventory")
+  }), /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "accounts",
+    icon: "💶",
+    label: "Cuentas",
+    onClick: () => setTab("accounts")
   }), perms.canManageOptions && /*#__PURE__*/React.createElement(NavItem, {
     active: tab === "options",
     icon: "⚙️",
