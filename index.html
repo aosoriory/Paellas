@@ -1197,7 +1197,8 @@ const ROLE_OPTIONS = [{
 function PersonFields({
   person,
   onChange,
-  onResetPin
+  onResetPin,
+  isMe
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1216,7 +1217,12 @@ function PersonFields({
     style: {
       fontSize: 13
     }
-  }), /*#__PURE__*/React.createElement("select", {
+  }), isMe && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: THEME.saffronDark
+    }
+  }, "🙋 Eres tú"), /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: person.role || "",
     onChange: e => onChange({
@@ -1472,7 +1478,7 @@ function InscripcionTab({
         fontWeight: 700,
         fontFamily: "'Fraunces', serif"
       }
-    }, f.lastName || "(sin apellido)", f.occasional && /*#__PURE__*/React.createElement("span", {
+    }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : "", f.occasional && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         color: THEME.inkSoft,
@@ -1776,7 +1782,7 @@ function AccountsTab({
         fontWeight: 700,
         fontFamily: "'Fraunces', serif"
       }
-    }, f.lastName || "(sin apellido)"), canEdit && /*#__PURE__*/React.createElement("button", {
+    }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : ""), canEdit && /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
         fontSize: 11.5,
@@ -1920,7 +1926,7 @@ function AccountsTab({
         fontFamily: "'Fraunces', serif",
         marginBottom: 4
       }
-    }, fName), /*#__PURE__*/React.createElement("div", {
+    }, fName, f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5,
         color: THEME.inkSoft,
@@ -2155,13 +2161,10 @@ function InventoryItemRow({
   removeItem,
   trackFullness,
   isLast,
-  isAdmin,
+  canManage,
   session
 }) {
   const holderName = id => families.find(f => f.id === id)?.lastName || "";
-  const isCurrentHolder = item.holderId && item.holderId === session.familyId;
-  const canManageFully = isAdmin || !item.holderId || isCurrentHolder;
-  const canClaim = !canManageFully; // belongs to another family: offer self-claim button instead of open dropdown
   return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 0",
@@ -2187,17 +2190,17 @@ function InventoryItemRow({
       alignItems: "center",
       gap: 4,
       fontSize: 12.5,
-      cursor: canManageFully ? "pointer" : "default",
-      opacity: canManageFully ? 1 : 0.5
+      cursor: canManage ? "pointer" : "default",
+      opacity: canManage ? 1 : 0.5
     }
   }, /*#__PURE__*/React.createElement("input", {
     type: "checkbox",
     checked: !!item.badState,
-    disabled: !canManageFully,
+    disabled: !canManage,
     onChange: e => updateItem({
       badState: e.target.checked
     })
-  }), "Mal estado"), /*#__PURE__*/React.createElement("button", {
+  }), "Mal estado"), canManage && /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: removeItem,
     title: "Eliminar"
@@ -2209,16 +2212,7 @@ function InventoryItemRow({
       gap: 8,
       alignItems: "center"
     }
-  }, canManageFully ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      display: "flex",
-      alignItems: "center",
-      gap: 6
-    }
-  }, isCurrentHolder && /*#__PURE__*/React.createElement("span", {
-    title: "Está en tu casa"
-  }, "🙋"), /*#__PURE__*/React.createElement("select", {
+  }, canManage ? /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.holderId,
     onChange: e => updateItem({
@@ -2233,53 +2227,23 @@ function InventoryItemRow({
   }, "Sin asignar"), families.map(f => /*#__PURE__*/React.createElement("option", {
     key: f.id,
     value: f.id
-  }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : ""))), !isCurrentHolder && /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      fontSize: 11.5,
-      background: "#fff",
-      border: `1px solid ${THEME.border}`,
-      padding: "3px 8px",
-      whiteSpace: "nowrap"
-    },
-    onClick: () => updateItem({
-      holderId: session.familyId
-    })
-  }, "🙋 La tengo yo")) : /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      display: "flex",
-      alignItems: "center",
-      gap: 6
-    }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : ""))) : /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12.5,
       color: THEME.inkSoft,
       flex: 1
     }
-  }, "📍 ", holderName(item.holderId)), /*#__PURE__*/React.createElement("button", {
-    className: "tab-btn",
-    style: {
-      fontSize: 11.5,
-      background: "#fff",
-      border: `1px solid ${THEME.border}`,
-      padding: "3px 8px"
-    },
-    onClick: () => updateItem({
-      holderId: session.familyId
-    })
-  }, "🙋 La tengo yo ahora")), trackFullness && /*#__PURE__*/React.createElement("select", {
+  }, "📍 ", item.holderId ? holderName(item.holderId) : "Sin asignar", item.holderId === session.familyId ? " 🙋" : ""), trackFullness && /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.fullness || "",
-    disabled: !canManageFully,
+    disabled: !canManage,
     onChange: e => updateItem({
       fullness: e.target.value
     }),
     style: {
       flex: 1,
       fontSize: 12.5,
-      opacity: canManageFully ? 1 : 0.5
+      opacity: canManage ? 1 : 0.5
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
@@ -2294,7 +2258,7 @@ function MaterialTypeCard({
   updateInventoryItem,
   addInventoryItem,
   removeInventoryItem,
-  isAdmin,
+  canManage,
   session
 }) {
   return /*#__PURE__*/React.createElement("div", {
@@ -2328,11 +2292,11 @@ function MaterialTypeCard({
     families: families,
     trackFullness: type.trackFullness,
     isLast: i === type.items.length - 1,
-    isAdmin: isAdmin,
+    canManage: canManage,
     session: session,
     updateItem: patch => updateInventoryItem(type.id, item.id, patch),
     removeItem: () => removeInventoryItem(type.id, item.id)
-  })), /*#__PURE__*/React.createElement("button", {
+  })), canManage && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
       background: "#fff",
@@ -2350,7 +2314,7 @@ function InventoryTab({
   persistInventory,
   people,
   session,
-  isAdmin
+  canManage
 }) {
   const [newTypeName, setNewTypeName] = useState("");
   const families = useMemo(() => sortByLastName(people), [people]);
@@ -2390,16 +2354,16 @@ function InventoryTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "El material se va repartiendo entre casas. Solo la familia que lo tiene, la que lo recibe, y el Admin pueden registrar el cambio."), inventory.map(type => /*#__PURE__*/React.createElement(MaterialTypeCard, {
+  }, canManage ? "El material se va repartiendo entre casas." : "El material se va repartiendo entre casas. Solo Editor y Admin pueden registrar cambios."), inventory.map(type => /*#__PURE__*/React.createElement(MaterialTypeCard, {
     key: type.id,
     type: type,
     families: families,
     updateInventoryItem: updateInventoryItem,
     addInventoryItem: addInventoryItem,
     removeInventoryItem: removeInventoryItem,
-    isAdmin: isAdmin,
+    canManage: canManage,
     session: session
-  })), /*#__PURE__*/React.createElement("div", {
+  })), canManage && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -2420,14 +2384,15 @@ function InventoryTab({
       color: "#fff"
     },
     onClick: addMaterialType
-  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")), "    ");
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")));
 }
 function AdminTab({
   people,
   persistPeople,
   onPreview,
   inscripcionOpen,
-  updateInscripcionOpen
+  updateInscripcionOpen,
+  session
 }) {
   const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
     ...f,
@@ -2494,7 +2459,11 @@ function AdminTab({
     style: {
       fontWeight: 600
     }
-  }), /*#__PURE__*/React.createElement("button", {
+  }), f.id === session.familyId && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13
+    }
+  }, "🙋"), /*#__PURE__*/React.createElement("button", {
     className: "icon-btn",
     onClick: () => removeFamily(f.id)
   }, /*#__PURE__*/React.createElement(Icon, null, "🗑️"))), /*#__PURE__*/React.createElement("div", {
@@ -2513,7 +2482,8 @@ function AdminTab({
         ...f.person1,
         pin: ""
       }
-    })
+    }),
+    isMe: f.id === session.familyId && session.personKey === "person1"
   }), f.person1.name && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
@@ -2534,7 +2504,8 @@ function AdminTab({
         ...f.person2,
         pin: ""
       }
-    })
+    }),
+    isMe: f.id === session.familyId && session.personKey === "person2"
   }), f.person2.name && /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
@@ -3091,6 +3062,13 @@ function App() {
       ...patch
     } : ing)
   });
+  const resetCurrentQty = () => persistData({
+    ...data,
+    ingredients: data.ingredients.map(ing => ({
+      ...ing,
+      currentQty: 0
+    }))
+  });
   const addIngredient = categoryId => persistData({
     ...data,
     ingredients: [...data.ingredients, {
@@ -3509,7 +3487,8 @@ function App() {
     updateIngredient: updateIngredient,
     addIngredient: addIngredient,
     removeIngredient: removeIngredient,
-    moveIngredient: moveIngredient
+    moveIngredient: moveIngredient,
+    resetCurrentQty: resetCurrentQty
   }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
     history: history,
     addYear: addYear,
@@ -3530,7 +3509,7 @@ function App() {
     persistInventory: persistInventory,
     people: people,
     session: effectiveSession,
-    isAdmin: perms.isAdmin
+    canManage: perms.canManageIngredients
   }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
     people: people,
     persistPeople: persistPeople,
@@ -3564,7 +3543,8 @@ function App() {
       personKey
     }),
     inscripcionOpen: data.inscripcionOpen !== false,
-    updateInscripcionOpen: updateInscripcionOpen
+    updateInscripcionOpen: updateInscripcionOpen,
+    session: session
   })), savingNote && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -3769,7 +3749,8 @@ function IngredientsTab({
   moveIngredient,
   onGenerate,
   history,
-  readOnly
+  readOnly,
+  resetCurrentQty
 }) {
   const categories = data.categories || [];
   const groups = useMemo(() => {
@@ -3789,13 +3770,29 @@ function IngredientsTab({
   });
   const catName = id => categories.find(c => c.id === id)?.name || "Sin categoría";
   const [historyFor, setHistoryFor] = useState(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const doReset = () => {
+    resetCurrentQty();
+    setConfirmReset(false);
+  };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Cantidad habitual = lo que hace falta un año normal. Tenemos = lo que ya guardáis."), groups.map(([catId, items]) => {
+  }, "Cantidad habitual = lo que hace falta un año normal. Tenemos = lo que ya guardáis."), !readOnly && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.inkSoft,
+      marginBottom: 14
+    },
+    onClick: () => setConfirmReset(true)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "🔄"), " Resetear lo que tenemos"), groups.map(([catId, items]) => {
     const open = openGroups.has(catId);
     const label = catName(catId);
     return /*#__PURE__*/React.createElement("div", {
@@ -3887,7 +3884,53 @@ function IngredientsTab({
     ing: historyFor,
     history: history,
     onClose: () => setHistoryFor(null)
-  }));
+  }), confirmReset && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44,34,22,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 50
+    },
+    onClick: () => setConfirmReset(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 20,
+      maxWidth: 360,
+      width: "100%"
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      margin: "0 0 16px"
+    }
+  }, "Esto pone a 0 el campo \"Tenemos\" de todos los ingredientes. No toca \"Habitual\". ¿Seguro?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => setConfirmReset(false)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.tomato,
+      color: "#fff"
+    },
+    onClick: doReset
+  }, "Resetear")))));
 }
 function OrderArrows({
   onUp,
@@ -4488,7 +4531,8 @@ function ShoppingSection(props) {
       moveIngredient: props.moveIngredient,
       onGenerate: handleSave,
       history: props.history,
-      readOnly: false
+      readOnly: false,
+      resetCurrentQty: props.resetCurrentQty
     }));
   }
   return /*#__PURE__*/React.createElement("div", null, props.canManage && /*#__PURE__*/React.createElement("button", {
