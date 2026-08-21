@@ -2488,123 +2488,147 @@ function App() {
   const [inventory, setInventory] = useState(null);
   const [session, setSession] = useState(null); // { familyId, personKey }
   const [previewSession, setPreviewSession] = useState(null); // admin-only "view as" mode
-  const [tab, setTab] = useState("shopping");
+  const [tab, setTabState] = useState(() => {
+    try {
+      return localStorage.getItem("paella_tab_v1") || "shopping";
+    } catch (e) {
+      return "shopping";
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [savingNote, setSavingNote] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState("");
+  const loadAllData = useCallback(async () => {
+    let d = await storage.get("paella-club-data");
+    let needsSave = false;
+    if (!d) {
+      d = {
+        ingredients: SEED_INGREDIENTS,
+        supermarkets: SEED_SUPERMARKETS,
+        categories: SEED_CATEGORIES,
+        units: SEED_UNITS,
+        childWeight: 0.5,
+        adultAge: 13,
+        inscripcionOpen: true,
+        gastosOpen: true,
+        paymentStatus: {}
+      };
+      needsSave = true;
+    } else {
+      const migrated = migrateData(d);
+      if (migrated !== d) {
+        d = migrated;
+        needsSave = true;
+      }
+      if (d.childWeight === undefined) {
+        d = {
+          ...d,
+          childWeight: 0.5
+        };
+        needsSave = true;
+      }
+      if (d.adultAge === undefined) {
+        d = {
+          ...d,
+          adultAge: 13
+        };
+        needsSave = true;
+      }
+      if (d.units === undefined) {
+        d = {
+          ...d,
+          units: SEED_UNITS
+        };
+        needsSave = true;
+      }
+      if (d.inscripcionOpen === undefined) {
+        d = {
+          ...d,
+          inscripcionOpen: true
+        };
+        needsSave = true;
+      }
+      if (d.gastosOpen === undefined) {
+        d = {
+          ...d,
+          gastosOpen: true
+        };
+        needsSave = true;
+      }
+      if (d.paymentStatus === undefined) {
+        d = {
+          ...d,
+          paymentStatus: {}
+        };
+        needsSave = true;
+      }
+      const normalized = normalizeUnits(d);
+      if (normalized !== d) {
+        d = normalized;
+        needsSave = true;
+      }
+    }
+    if (needsSave) await storage.set("paella-club-data", d);
+    let sl = await storage.get("paella-shopping-list");
+    let h = await storage.get("paella-history");
+    if (!h) {
+      h = SEED_HISTORY;
+      await storage.set("paella-history", h);
+    }
+    let p = await storage.get("paella-people");
+    let peopleNeedsSave = false;
+    if (!p) {
+      p = SEED_PEOPLE;
+      peopleNeedsSave = true;
+    } else {
+      const migratedPeople = p.map(f => Array.isArray(f.expenses) ? f : {
+        ...f,
+        expenses: f.spent ? [{
+          id: uid("exp"),
+          concept: "Gasto",
+          amount: Number(f.spent) || 0
+        }] : []
+      });
+      if (JSON.stringify(migratedPeople) !== JSON.stringify(p)) {
+        p = migratedPeople;
+        peopleNeedsSave = true;
+      }
+    }
+    if (peopleNeedsSave) await storage.set("paella-people", p);
+    let inv = await storage.get("paella-inventory");
+    if (!inv) {
+      inv = SEED_INVENTORY;
+      await storage.set("paella-inventory", inv);
+    }
+    setData(d);
+    setShoppingList(sl);
+    setHistory(h);
+    setPeople(p);
+    setInventory(inv);
+    return p;
+  }, []);
+  const setTab = useCallback(newTab => {
+    setTabState(newTab);
+    try {
+      localStorage.setItem("paella_tab_v1", newTab);
+    } catch (e) {/* ignore */}
+    setSavingNote("Actualizando…");
+    loadAllData().then(() => {
+      setSavingNote("");
+    }).catch(() => {
+      setError("No se ha podido actualizar desde Supabase.");
+      setTimeout(() => setError(""), 2500);
+      setSavingNote("");
+    });
+  }, [loadAllData]);
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        let d = await storage.get("paella-club-data");
-        let needsSave = false;
-        if (!d) {
-          d = {
-            ingredients: SEED_INGREDIENTS,
-            supermarkets: SEED_SUPERMARKETS,
-            categories: SEED_CATEGORIES,
-            units: SEED_UNITS,
-            childWeight: 0.5,
-            adultAge: 13,
-            inscripcionOpen: true,
-            gastosOpen: true,
-            paymentStatus: {}
-          };
-          needsSave = true;
-        } else {
-          const migrated = migrateData(d);
-          if (migrated !== d) {
-            d = migrated;
-            needsSave = true;
-          }
-          if (d.childWeight === undefined) {
-            d = {
-              ...d,
-              childWeight: 0.5
-            };
-            needsSave = true;
-          }
-          if (d.adultAge === undefined) {
-            d = {
-              ...d,
-              adultAge: 13
-            };
-            needsSave = true;
-          }
-          if (d.units === undefined) {
-            d = {
-              ...d,
-              units: SEED_UNITS
-            };
-            needsSave = true;
-          }
-          if (d.inscripcionOpen === undefined) {
-            d = {
-              ...d,
-              inscripcionOpen: true
-            };
-            needsSave = true;
-          }
-          if (d.gastosOpen === undefined) {
-            d = {
-              ...d,
-              gastosOpen: true
-            };
-            needsSave = true;
-          }
-          if (d.paymentStatus === undefined) {
-            d = {
-              ...d,
-              paymentStatus: {}
-            };
-            needsSave = true;
-          }
-          const normalized = normalizeUnits(d);
-          if (normalized !== d) {
-            d = normalized;
-            needsSave = true;
-          }
-        }
-        if (needsSave) await storage.set("paella-club-data", d);
-        let sl = await storage.get("paella-shopping-list");
-        let h = await storage.get("paella-history");
-        if (!h) {
-          h = SEED_HISTORY;
-          await storage.set("paella-history", h);
-        }
-        let p = await storage.get("paella-people");
-        let peopleNeedsSave = false;
-        if (!p) {
-          p = SEED_PEOPLE;
-          peopleNeedsSave = true;
-        } else {
-          const migratedPeople = p.map(f => Array.isArray(f.expenses) ? f : {
-            ...f,
-            expenses: f.spent ? [{
-              id: uid("exp"),
-              concept: "Gasto",
-              amount: Number(f.spent) || 0
-            }] : []
-          });
-          if (JSON.stringify(migratedPeople) !== JSON.stringify(p)) {
-            p = migratedPeople;
-            peopleNeedsSave = true;
-          }
-        }
-        if (peopleNeedsSave) await storage.set("paella-people", p);
-        let inv = await storage.get("paella-inventory");
-        if (!inv) {
-          inv = SEED_INVENTORY;
-          await storage.set("paella-inventory", inv);
-        }
+        const p = await loadAllData();
         if (!cancelled) {
-          setData(d);
-          setShoppingList(sl);
-          setHistory(h);
-          setPeople(p);
-          setInventory(inv);
           try {
             const saved = JSON.parse(localStorage.getItem("paella_person_v1") || "null");
             if (saved) {
@@ -2630,7 +2654,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAllData]);
   const persistPeople = useCallback(async next => {
     setPeople(next);
     try {
