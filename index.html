@@ -1054,7 +1054,7 @@ function PersonLoginScreen({
   attemptLogin
 }) {
   const [selected, setSelected] = useState(null);
-  const sorted = useMemo(() => sortByLastName(families), [families]);
+  const sorted = useMemo(() => sortByLastName(families.filter(f => !f.occasional)), [families]);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
@@ -1279,6 +1279,15 @@ function computeSettlements(balances) {
 function sortByLastName(list) {
   return [...list].sort((a, b) => (a.lastName || "").localeCompare(b.lastName || "", "es"));
 }
+function sortFamiliesDisplay(list) {
+  const cmp = (a, b) => (a.lastName || "").localeCompare(b.lastName || "", "es");
+  const regular = list.filter(f => !f.occasional).sort(cmp);
+  const occasional = list.filter(f => f.occasional).sort(cmp);
+  return [...regular, ...occasional];
+}
+function familyDisplayName(f) {
+  return `${f.occasional ? "* " : ""}${f.lastName || "(sin apellido)"}`;
+}
 function NumberField({
   value,
   onCommit,
@@ -1373,7 +1382,7 @@ function InscripcionTab({
   adminNames
 }) {
   const [editingId, setEditingId] = useState(null);
-  const sorted = useMemo(() => sortByLastName(people), [people]);
+  const sorted = useMemo(() => sortFamiliesDisplay(people), [people]);
   const totals = useMemo(() => computeAccountTotals(people, childWeight), [people, childWeight]);
   const updateFamily = (id, patch) => persistPeople(people.map(f => f.id === id ? {
     ...f,
@@ -1398,6 +1407,7 @@ function InscripcionTab({
     notParticipating: false,
     occasional: true
   }]);
+  const removeOccasionalFamily = id => persistPeople(people.filter(f => f.id !== id));
   const [confirmReset, setConfirmReset] = useState(false);
   const doReset = () => {
     persistPeople(people.map(f => ({
@@ -1478,13 +1488,12 @@ function InscripcionTab({
         fontWeight: 700,
         fontFamily: "'Fraunces', serif"
       }
-    }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : "", f.occasional && /*#__PURE__*/React.createElement("span", {
+    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 11,
-        color: THEME.inkSoft,
-        fontWeight: 400
+        display: "flex",
+        gap: 6
       }
-    }, " · ocasional")), canEdit && /*#__PURE__*/React.createElement("button", {
+    }, canEdit && /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
         fontSize: 11.5,
@@ -1493,7 +1502,13 @@ function InscripcionTab({
         padding: "3px 8px"
       },
       onClick: () => setEditingId(editing ? null : f.id)
-    }, editing ? "▼ Listo" : "▶ Editar")), editing ? /*#__PURE__*/React.createElement("div", {
+    }, editing ? "▼ Listo" : "▶ Editar"), isAdmin && f.occasional && /*#__PURE__*/React.createElement("button", {
+      className: "icon-btn",
+      onClick: () => removeOccasionalFamily(f.id),
+      title: "Eliminar"
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 15
+    }, "🗑️")))), editing ? /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 8
       }
@@ -1661,7 +1676,7 @@ function AccountsTab({
   const [savedMsg, setSavedMsg] = useState(false);
   const [adminExpanded, setAdminExpanded] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const sorted = useMemo(() => sortByLastName(people), [people]);
+  const sorted = useMemo(() => sortFamiliesDisplay(people), [people]);
   const totals = useMemo(() => computeAccountTotals(people, childWeight), [people, childWeight]);
   const transfers = useMemo(() => computeSettlements(totals.balances), [totals.balances]);
   const allSettled = transfers.length > 0 && transfers.every(t => (paymentStatus[transferKey(t.from, t.to)] || {}).confirmed);
@@ -1782,7 +1797,7 @@ function AccountsTab({
         fontWeight: 700,
         fontFamily: "'Fraunces', serif"
       }
-    }, f.lastName || "(sin apellido)", f.id === session.familyId ? " 🙋" : ""), canEdit && /*#__PURE__*/React.createElement("button", {
+    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), canEdit && /*#__PURE__*/React.createElement("button", {
       className: "tab-btn",
       style: {
         fontSize: 11.5,
@@ -1887,7 +1902,23 @@ function AccountsTab({
       fontSize: 16,
       margin: "0 0 8px"
     }
-  }, "Quién paga a quién"), allSettled && /*#__PURE__*/React.createElement("div", {
+  }, "Quién paga a quién"), transfers.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft,
+      marginBottom: 12,
+      lineHeight: 1.5
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: THEME.oliveDark
+    }
+  }, "✅"), " = quien paga ha marcado el pago como hecho. ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: THEME.oliveDark,
+      fontWeight: 700
+    }
+  }, "✅✅"), " = quien cobra ha confirmado que lo recibió."), allSettled && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#E9F2E0",
       border: `1px solid ${THEME.olive}`,
@@ -1926,7 +1957,7 @@ function AccountsTab({
         fontFamily: "'Fraunces', serif",
         marginBottom: 4
       }
-    }, fName, f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("div", {
+    }, familyDisplayName(f), f.id === session.familyId ? " 🙋" : ""), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5,
         color: THEME.inkSoft,
@@ -1964,7 +1995,7 @@ function AccountsTab({
         style: {
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           paddingLeft: 10,
           marginTop: 3,
           flexWrap: "wrap"
@@ -1972,13 +2003,15 @@ function AccountsTab({
       }, /*#__PURE__*/React.createElement("span", null, "→ ", t.to, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")), st.confirmed ? /*#__PURE__*/React.createElement("span", {
         style: {
           color: THEME.oliveDark,
-          fontWeight: 700
+          fontWeight: 700,
+          fontSize: 12
         }
-      }, "✅✅ Confirmado") : st.paid ? /*#__PURE__*/React.createElement("span", {
+      }, "✅✅") : st.paid ? /*#__PURE__*/React.createElement("span", {
         style: {
-          color: THEME.oliveDark
+          color: THEME.oliveDark,
+          fontSize: 12
         }
-      }, "✅ Pago hecho", canEdit && /*#__PURE__*/React.createElement("button", {
+      }, "✅", canEdit && /*#__PURE__*/React.createElement("button", {
         onClick: () => updatePaymentStatus(key, {
           paid: false
         }),
@@ -1986,23 +2019,23 @@ function AccountsTab({
           background: "none",
           border: "none",
           color: THEME.inkSoft,
-          fontSize: 11,
+          fontSize: 10,
           textDecoration: "underline",
           cursor: "pointer",
-          marginLeft: 6
+          marginLeft: 4
         }
       }, "deshacer")) : canEdit ? /*#__PURE__*/React.createElement("button", {
         className: "tab-btn",
         style: {
-          fontSize: 11.5,
+          fontSize: 10,
           background: "#fff",
           border: `1px solid ${THEME.border}`,
-          padding: "3px 8px"
+          padding: "2px 6px"
         },
         onClick: () => updatePaymentStatus(key, {
           paid: true
         })
-      }, "Marcar pago hecho") : null);
+      }, "Pago hecho") : null);
     })), owedToMe.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12.5
@@ -2015,7 +2048,7 @@ function AccountsTab({
         style: {
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           paddingLeft: 10,
           marginTop: 3,
           flexWrap: "wrap"
@@ -2023,9 +2056,10 @@ function AccountsTab({
       }, /*#__PURE__*/React.createElement("span", null, "← ", t.from, ": ", /*#__PURE__*/React.createElement("strong", null, t.amount.toFixed(2), " €")), st.confirmed ? /*#__PURE__*/React.createElement("span", {
         style: {
           color: THEME.oliveDark,
-          fontWeight: 700
+          fontWeight: 700,
+          fontSize: 12
         }
-      }, "✅✅ Confirmado", canEdit && /*#__PURE__*/React.createElement("button", {
+      }, "✅✅", canEdit && /*#__PURE__*/React.createElement("button", {
         onClick: () => updatePaymentStatus(key, {
           confirmed: false
         }),
@@ -2033,27 +2067,28 @@ function AccountsTab({
           background: "none",
           border: "none",
           color: THEME.inkSoft,
-          fontSize: 11,
+          fontSize: 10,
           textDecoration: "underline",
           cursor: "pointer",
-          marginLeft: 6
+          marginLeft: 4
         }
       }, "deshacer")) : /*#__PURE__*/React.createElement(React.Fragment, null, st.paid && /*#__PURE__*/React.createElement("span", {
         style: {
           color: THEME.inkSoft,
-          fontSize: 11.5
+          fontSize: 12
         }
-      }, "✅ dice que ya pagó"), canEdit && /*#__PURE__*/React.createElement("button", {
+      }, "✅"), canEdit && /*#__PURE__*/React.createElement("button", {
         className: "tab-btn",
         style: {
-          fontSize: 11.5,
+          fontSize: 10,
           background: THEME.olive,
-          color: "#fff"
+          color: "#fff",
+          padding: "2px 6px"
         },
         onClick: () => updatePaymentStatus(key, {
           confirmed: true
         })
-      }, "Confirmar pago recibido")));
+      }, "Confirmar")));
     })));
   })), allSettled && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2067,7 +2102,71 @@ function AccountsTab({
       textAlign: "center",
       marginBottom: 18
     }
-  }, "✅✅ Ajuste de cuentas realizado"), isAdmin && /*#__PURE__*/React.createElement("div", {
+  }, "✅✅ Ajuste de cuentas realizado"), transfers.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 14,
+      margin: "0 0 8px",
+      color: THEME.oliveDark
+    }
+  }, "Resumen de todos los pagos"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, transfers.map((t, i) => {
+    const key = transferKey(t.from, t.to);
+    const st = paymentStatus[key] || {};
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: "8px 12px",
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, t.from), /*#__PURE__*/React.createElement(Icon, {
+      size: 13
+    }, "→"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, t.to), /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: "auto",
+        fontWeight: 700,
+        color: THEME.tomatoDark
+      }
+    }, t.amount.toFixed(2), " €"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        minWidth: 22,
+        textAlign: "right"
+      }
+    }, st.confirmed ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: THEME.oliveDark,
+        fontWeight: 700
+      }
+    }, "✅✅") : st.paid ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: THEME.oliveDark
+      }
+    }, "✅") : null));
+  }))), isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 12,
       border: `1px dashed ${THEME.border}`,
@@ -2317,7 +2416,7 @@ function InventoryTab({
   canManage
 }) {
   const [newTypeName, setNewTypeName] = useState("");
-  const families = useMemo(() => sortByLastName(people), [people]);
+  const families = useMemo(() => sortByLastName(people.filter(f => !f.occasional)), [people]);
   const updateInventoryItem = (typeId, itemId, patch) => persistInventory(inventory.map(t => t.id === typeId ? {
     ...t,
     items: t.items.map(it => it.id === itemId ? {
@@ -2417,7 +2516,12 @@ function AdminTab({
     expenses: [],
     notParticipating: false
   }]);
-  const sorted = useMemo(() => sortByLastName(people), [people]);
+  const managedPeople = useMemo(() => people.filter(f => !f.occasional), [people]);
+  const sorted = useMemo(() => sortByLastName(managedPeople), [managedPeople]);
+  const namesByRole = role => managedPeople.flatMap(f => [f.person1, f.person2]).filter(p => p.role === role && p.name).map(p => p.name);
+  const admins = namesByRole("admin"),
+    editors = namesByRole("editor"),
+    compradores = namesByRole("comprador");
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
     className: "tab-btn",
     style: {
@@ -2427,13 +2531,21 @@ function AdminTab({
       marginBottom: 18
     },
     onClick: () => updateInscripcionOpen(!inscripcionOpen)
-  }, inscripcionOpen ? "🔒 Cerrar Inscripción" : "🔓 Abrir Inscripción"), /*#__PURE__*/React.createElement("p", {
+  }, inscripcionOpen ? "🔒 Cerrar Inscripción" : "🔓 Abrir Inscripción"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: THEME.borderSoft,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 18,
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "🔑 Admins:"), " ", admins.join(", ") || "—"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "✏️ Editores:"), " ", editors.join(", ") || "—"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "🛒 Compradores:"), " ", compradores.join(", ") || "—")), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 13,
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "Gestiona las familias: nombres, roles, y resetea PINes si alguien lo olvida. Toca \"👁️ Ver como\" para probar la app como esa persona, sin PIN."), sorted.map(f => /*#__PURE__*/React.createElement("div", {
+  }, "Gestiona las familias: nombres, roles, y resetea PINes si alguien lo olvida. Toca \"👁️ Ver como\" para probar la app como esa persona, sin PIN. Las familias ocasionales (añadidas desde Inscripción) no salen aquí."), sorted.map(f => /*#__PURE__*/React.createElement("div", {
     key: f.id,
     style: {
       border: `1px solid ${THEME.border}`,
