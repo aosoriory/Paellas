@@ -1994,8 +1994,14 @@ function InventoryItemRow({
   updateItem,
   removeItem,
   trackFullness,
-  isLast
+  isLast,
+  isAdmin,
+  session
 }) {
+  const holderName = id => families.find(f => f.id === id)?.lastName || "";
+  const isCurrentHolder = item.holderId && item.holderId === session.familyId;
+  const canManageFully = isAdmin || !item.holderId || isCurrentHolder;
+  const canClaim = !canManageFully; // belongs to another family: offer self-claim button instead of open dropdown
   return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 0",
@@ -2021,11 +2027,13 @@ function InventoryItemRow({
       alignItems: "center",
       gap: 4,
       fontSize: 12.5,
-      cursor: "pointer"
+      cursor: canManageFully ? "pointer" : "default",
+      opacity: canManageFully ? 1 : 0.5
     }
   }, /*#__PURE__*/React.createElement("input", {
     type: "checkbox",
     checked: !!item.badState,
+    disabled: !canManageFully,
     onChange: e => updateItem({
       badState: e.target.checked
     })
@@ -2040,7 +2048,7 @@ function InventoryItemRow({
       display: "flex",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement("select", {
+  }, canManageFully ? /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.holderId,
     onChange: e => updateItem({
@@ -2055,15 +2063,41 @@ function InventoryItemRow({
   }, "Sin asignar"), families.map(f => /*#__PURE__*/React.createElement("option", {
     key: f.id,
     value: f.id
-  }, f.lastName || "(sin apellido)"))), trackFullness && /*#__PURE__*/React.createElement("select", {
+  }, f.lastName || "(sin apellido)"))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft,
+      flex: 1
+    }
+  }, "📍 ", holderName(item.holderId)), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 11.5,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      padding: "3px 8px"
+    },
+    onClick: () => updateItem({
+      holderId: session.familyId
+    })
+  }, "La tengo yo ahora")), trackFullness && /*#__PURE__*/React.createElement("select", {
     className: "paella-input",
     value: item.fullness || "",
+    disabled: !canManageFully,
     onChange: e => updateItem({
       fullness: e.target.value
     }),
     style: {
       flex: 1,
-      fontSize: 12.5
+      fontSize: 12.5,
+      opacity: canManageFully ? 1 : 0.5
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
@@ -2077,7 +2111,9 @@ function MaterialTypeCard({
   families,
   updateInventoryItem,
   addInventoryItem,
-  removeInventoryItem
+  removeInventoryItem,
+  isAdmin,
+  session
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2110,6 +2146,8 @@ function MaterialTypeCard({
     families: families,
     trackFullness: type.trackFullness,
     isLast: i === type.items.length - 1,
+    isAdmin: isAdmin,
+    session: session,
     updateItem: patch => updateInventoryItem(type.id, item.id, patch),
     removeItem: () => removeInventoryItem(type.id, item.id)
   })), /*#__PURE__*/React.createElement("button", {
@@ -2128,7 +2166,9 @@ function MaterialTypeCard({
 function InventoryTab({
   inventory,
   persistInventory,
-  people
+  people,
+  session,
+  isAdmin
 }) {
   const [newTypeName, setNewTypeName] = useState("");
   const families = useMemo(() => sortByLastName(people), [people]);
@@ -2168,13 +2208,15 @@ function InventoryTab({
       color: THEME.inkSoft,
       marginTop: 0
     }
-  }, "El material se va repartiendo entre casas. Cualquiera puede registrar quién lo tiene ahora."), inventory.map(type => /*#__PURE__*/React.createElement(MaterialTypeCard, {
+  }, "El material se va repartiendo entre casas. Solo la familia que lo tiene, la que lo recibe, y el Admin pueden registrar el cambio."), inventory.map(type => /*#__PURE__*/React.createElement(MaterialTypeCard, {
     key: type.id,
     type: type,
     families: families,
     updateInventoryItem: updateInventoryItem,
     addInventoryItem: addInventoryItem,
-    removeInventoryItem: removeInventoryItem
+    removeInventoryItem: removeInventoryItem,
+    isAdmin: isAdmin,
+    session: session
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -2196,7 +2238,7 @@ function InventoryTab({
       color: "#fff"
     },
     onClick: addMaterialType
-  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")));
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir tipo")), "    ");
 }
 function AdminTab({
   people,
@@ -3235,7 +3277,9 @@ function App() {
     setLightboxUrl: setLightboxUrl,
     moveShoppingItem: moveShoppingItem,
     canToggle: perms.canToggleShopping,
-    canManage: perms.canManageIngredients
+    canManage: perms.canManageIngredients,
+    displayName: displayName,
+    persistShoppingList: persistShoppingList
   }), tab === "history" && /*#__PURE__*/React.createElement(HistoryTab, {
     history: history,
     addYear: addYear,
@@ -3254,7 +3298,9 @@ function App() {
   }), tab === "inventory" && /*#__PURE__*/React.createElement(InventoryTab, {
     inventory: inventory,
     persistInventory: persistInventory,
-    people: people
+    people: people,
+    session: effectiveSession,
+    isAdmin: perms.isAdmin
   }), tab === "inscripcion" && /*#__PURE__*/React.createElement(InscripcionTab, {
     people: people,
     persistPeople: persistPeople,
@@ -4251,9 +4297,21 @@ function ShoppingTab({
   setLightboxUrl,
   moveShoppingItem,
   canToggle,
-  canManage
+  canManage,
+  displayName,
+  persistShoppingList
 }) {
   const [openItem, setOpenItem] = useState(null);
+  const [openCats, setOpenCats] = useState(() => new Set(grouped.map(([catName]) => catName)));
+  const [dividing, setDividing] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState(new Set());
+  const [confirmItemId, setConfirmItemId] = useState(null); // item requiring "otro ya lo eligió" confirm
+  const [confirmUndivide, setConfirmUndivide] = useState(false);
+  const toggleCat = catName => setOpenCats(prev => {
+    const next = new Set(prev);
+    next.has(catName) ? next.delete(catName) : next.add(catName);
+    return next;
+  });
   if (!shoppingList || shoppingList.items.length === 0) {
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4286,6 +4344,68 @@ function ShoppingTab({
       onClick: onGenerate
     }, /*#__PURE__*/React.createElement(Icon, null, "🛒"), " Generar lista de la compra"));
   }
+  const isDivided = shoppingList.items.some(it => it.assignedTo);
+  const startDividing = () => {
+    setPendingSelection(new Set(shoppingList.items.filter(it => it.assignedTo?.name === displayName).map(it => it.id)));
+    setDividing(true);
+  };
+  const cancelDividing = () => {
+    setDividing(false);
+    setPendingSelection(new Set());
+    setConfirmItemId(null);
+  };
+  const toggleSelect = it => {
+    const alreadyMine = pendingSelection.has(it.id);
+    if (alreadyMine) {
+      setPendingSelection(prev => {
+        const next = new Set(prev);
+        next.delete(it.id);
+        return next;
+      });
+      return;
+    }
+    const claimedByOther = it.assignedTo && it.assignedTo.name !== displayName;
+    if (claimedByOther) {
+      setConfirmItemId(it.id);
+      return;
+    }
+    setPendingSelection(prev => new Set(prev).add(it.id));
+  };
+  const confirmOverrideItem = () => {
+    setPendingSelection(prev => new Set(prev).add(confirmItemId));
+    setConfirmItemId(null);
+  };
+  const confirmDivision = () => {
+    const next = {
+      ...shoppingList,
+      items: shoppingList.items.map(it => {
+        if (pendingSelection.has(it.id)) return {
+          ...it,
+          assignedTo: {
+            name: displayName
+          }
+        };
+        if (it.assignedTo?.name === displayName) return {
+          ...it,
+          assignedTo: null
+        };
+        return it;
+      })
+    };
+    persistShoppingList(next);
+    setDividing(false);
+    setPendingSelection(new Set());
+  };
+  const undivide = () => {
+    persistShoppingList({
+      ...shoppingList,
+      items: shoppingList.items.map(it => ({
+        ...it,
+        assignedTo: null
+      }))
+    });
+    setConfirmUndivide(false);
+  };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.card,
@@ -4313,117 +4433,327 @@ function ShoppingTab({
     onClick: onGenerate
   }, /*#__PURE__*/React.createElement(Icon, {
     size: 14
-  }, "↩️"), " Regenerar")), grouped.map(([catName, items]) => /*#__PURE__*/React.createElement("div", {
-    key: catName,
-    style: {
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontFamily: "'Fraunces', serif",
-      fontSize: 15,
-      margin: "0 0 8px",
-      color: THEME.oliveDark
-    }
-  }, catName), /*#__PURE__*/React.createElement("div", {
+  }, "↩️"), " Regenerar")), canToggle && !dividing && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      flexDirection: "column",
-      gap: 6
+      gap: 8,
+      marginBottom: 16,
+      flexWrap: "wrap"
     }
-  }, items.map((it, i) => {
-    const open = openItem === it.id;
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`,
+      color: THEME.ink
+    },
+    onClick: startDividing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 14
+  }, "🔀"), " ", isDivided ? "Elegir/editar mis productos" : "Dividir lista"), isDivided && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.tomato}`,
+      color: THEME.tomatoDark
+    },
+    onClick: () => setConfirmUndivide(true)
+  }, "Anular división")), dividing && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FFF8E8",
+      border: `1px solid ${THEME.saffron}`,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 600,
+      margin: "0 0 4px"
+    }
+  }, "Elige los productos que vas a comprar tú"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: THEME.inkSoft,
+      margin: "0 0 10px"
+    }
+  }, "⚠️ Esto NO los marca como comprados, solo indica quién va a por ellos."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff"
+    },
+    onClick: confirmDivision
+  }, "Confirmar división de la lista"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: cancelDividing
+  }, "Cancelar"))), confirmUndivide && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44,34,22,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 50
+    },
+    onClick: () => setConfirmUndivide(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#fff",
+      borderRadius: 14,
+      padding: 20,
+      maxWidth: 360,
+      width: "100%"
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      margin: "0 0 16px"
+    }
+  }, "Otro comprador ha realizado una división. Antes de anularla, asegúrate de que estáis coordinados."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => setConfirmUndivide(false)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.tomato,
+      color: "#fff"
+    },
+    onClick: undivide
+  }, "Confirmar")))), confirmItemId && (() => {
+    const it = shoppingList.items.find(x => x.id === confirmItemId);
     return /*#__PURE__*/React.createElement("div", {
-      key: it.id,
       style: {
-        background: it.checked ? "#F3EFE0" : THEME.card,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 10,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "9px 12px",
-        cursor: "pointer"
-      },
-      onClick: () => setOpenItem(open ? null : it.id)
-    }, canManage && /*#__PURE__*/React.createElement("span", {
-      onClick: e => e.stopPropagation()
-    }, /*#__PURE__*/React.createElement(OrderArrows, {
-      onUp: () => moveShoppingItem(it.id, -1),
-      onDown: () => moveShoppingItem(it.id, 1),
-      isFirst: i === 0,
-      isLast: i === items.length - 1
-    })), /*#__PURE__*/React.createElement("span", {
-      onClick: e => {
-        if (canToggle) {
-          e.stopPropagation();
-          toggleCheck(it.id);
-        }
-      },
-      style: {
-        width: 20,
-        height: 20,
-        borderRadius: 6,
-        border: `2px solid ${it.checked ? THEME.olive : THEME.saffronDark}`,
-        background: it.checked ? THEME.olive : "#fff",
+        position: "fixed",
+        inset: 0,
+        background: "rgba(44,34,22,0.45)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        flexShrink: 0,
-        fontSize: 12,
+        padding: 20,
+        zIndex: 50
+      },
+      onClick: () => setConfirmItemId(null)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        borderRadius: 14,
+        padding: 20,
+        maxWidth: 360,
+        width: "100%"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        fontSize: 14,
+        margin: "0 0 16px"
+      }
+    }, it?.assignedTo?.name, " ha indicado que comprará \"", it?.name, "\". Antes de elegirlo tú, asegúrate de que estáis coordinados."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        justifyContent: "flex-end"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: "#fff",
+        border: `1px solid ${THEME.border}`
+      },
+      onClick: () => setConfirmItemId(null)
+    }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+      className: "tab-btn",
+      style: {
+        background: THEME.saffron,
         color: "#fff"
-      }
-    }, it.checked && "✓"), /*#__PURE__*/React.createElement("span", {
-      onClick: e => {
-        if (it.imageUrl) {
-          e.stopPropagation();
-          setLightboxUrl(it.imageUrl);
-        }
-      }
-    }, /*#__PURE__*/React.createElement(ImgThumb, {
-      url: it.imageUrl,
-      size: 34
-    })), /*#__PURE__*/React.createElement("span", {
+      },
+      onClick: confirmOverrideItem
+    }, "Confirmar"))));
+  })(), grouped.map(([catName, items]) => {
+    const catOpen = openCats.has(catName);
+    return /*#__PURE__*/React.createElement("div", {
+      key: catName,
       style: {
-        flex: 1,
-        textDecoration: it.checked ? "line-through" : "none",
-        color: it.checked ? THEME.inkSoft : THEME.ink,
-        fontSize: 14
+        marginBottom: 18,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        overflow: "hidden"
       }
-    }, it.name), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => toggleCat(catName),
       style: {
-        fontWeight: 600,
-        fontSize: 13,
-        color: THEME.tomatoDark,
-        whiteSpace: "nowrap"
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "10px 14px",
+        background: THEME.borderSoft,
+        cursor: "pointer"
       }
-    }, fmtQty(it.qty), " ", it.unit)), open && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: {
-        padding: "0 12px 12px 46px",
-        fontSize: 12.5,
-        color: THEME.inkSoft,
+        fontFamily: "'Fraunces', serif",
+        fontWeight: 700,
+        fontSize: 15,
+        color: THEME.oliveDark
+      }
+    }, catOpen ? "▼" : "▶", " ", catName), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: THEME.inkSoft
+      }
+    }, items.length)), catOpen && /*#__PURE__*/React.createElement("div", {
+      style: {
         display: "flex",
         flexDirection: "column",
-        gap: 3
+        gap: 6,
+        padding: 8,
+        background: THEME.cream
       }
-    }, /*#__PURE__*/React.createElement("span", null, "Habitual: ", /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: THEME.ink
-      }
-    }, fmtQty(it.normalQty || 0), " ", it.unit)), /*#__PURE__*/React.createElement("span", null, "Tenemos: ", /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: THEME.ink
-      }
-    }, fmtQty(it.currentQty || 0), " ", it.unit)), it.supermarketName && /*#__PURE__*/React.createElement("span", null, "Supermercado: ", /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: THEME.ink
-      }
-    }, it.supermarketName))));
-  })))));
+    }, items.map((it, i) => {
+      const open = openItem === it.id;
+      const selected = pendingSelection.has(it.id);
+      return /*#__PURE__*/React.createElement("div", {
+        key: it.id,
+        style: {
+          background: it.checked ? "#F3EFE0" : THEME.card,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 10,
+          overflow: "hidden"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "9px 12px",
+          cursor: "pointer"
+        },
+        onClick: () => dividing ? toggleSelect(it) : setOpenItem(open ? null : it.id)
+      }, !dividing && canManage && /*#__PURE__*/React.createElement("span", {
+        onClick: e => e.stopPropagation()
+      }, /*#__PURE__*/React.createElement(OrderArrows, {
+        onUp: () => moveShoppingItem(it.id, -1),
+        onDown: () => moveShoppingItem(it.id, 1),
+        isFirst: i === 0,
+        isLast: i === items.length - 1
+      })), dividing ? /*#__PURE__*/React.createElement("span", {
+        onClick: e => {
+          e.stopPropagation();
+          toggleSelect(it);
+        },
+        style: {
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          border: `2px solid ${THEME.saffronDark}`,
+          background: selected ? THEME.saffron : "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          fontSize: 12,
+          color: "#fff"
+        }
+      }, selected && "🛍️") : /*#__PURE__*/React.createElement("span", {
+        onClick: e => {
+          if (canToggle) {
+            e.stopPropagation();
+            toggleCheck(it.id);
+          }
+        },
+        style: {
+          width: 20,
+          height: 20,
+          borderRadius: 6,
+          border: `2px solid ${it.checked ? THEME.olive : THEME.saffronDark}`,
+          background: it.checked ? THEME.olive : "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          fontSize: 12,
+          color: "#fff"
+        }
+      }, it.checked && "✓"), /*#__PURE__*/React.createElement("span", {
+        onClick: e => {
+          if (it.imageUrl && !dividing) {
+            e.stopPropagation();
+            setLightboxUrl(it.imageUrl);
+          }
+        }
+      }, /*#__PURE__*/React.createElement(ImgThumb, {
+        url: it.imageUrl,
+        size: 34
+      })), /*#__PURE__*/React.createElement("span", {
+        style: {
+          flex: 1
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: "block",
+          textDecoration: it.checked && !dividing ? "line-through" : "none",
+          color: it.checked && !dividing ? THEME.inkSoft : THEME.ink,
+          fontSize: 14
+        }
+      }, it.name), !dividing && it.assignedTo && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: THEME.saffronDark
+        }
+      }, "🛍️ Compra: ", it.assignedTo.name)), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: 600,
+          fontSize: 13,
+          color: THEME.tomatoDark,
+          whiteSpace: "nowrap"
+        }
+      }, fmtQty(it.qty), " ", it.unit)), open && !dividing && /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "0 12px 12px 46px",
+          fontSize: 12.5,
+          color: THEME.inkSoft,
+          display: "flex",
+          flexDirection: "column",
+          gap: 3
+        }
+      }, /*#__PURE__*/React.createElement("span", null, "Habitual: ", /*#__PURE__*/React.createElement("strong", {
+        style: {
+          color: THEME.ink
+        }
+      }, fmtQty(it.normalQty || 0), " ", it.unit)), /*#__PURE__*/React.createElement("span", null, "Tenemos: ", /*#__PURE__*/React.createElement("strong", {
+        style: {
+          color: THEME.ink
+        }
+      }, fmtQty(it.currentQty || 0), " ", it.unit)), it.supermarketName && /*#__PURE__*/React.createElement("span", null, "Supermercado: ", /*#__PURE__*/React.createElement("strong", {
+        style: {
+          color: THEME.ink
+        }
+      }, it.supermarketName))));
+    })));
+  }));
 }
 function CloseYearModal({
   shoppingList,
