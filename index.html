@@ -170,6 +170,11 @@ const SEED_INVENTORY = [{
   trackFullness: false,
   items: seedInventoryItems(3)
 }];
+const SEED_ENCARGOS = ["Hacer compra", "Guardar comida en casa", "Bajar a coger sitio", "Bajar mesas plegables", "Bajar bombonas, paelleras, aros, patas", "Preparar aperitivos", "Hacer las paellas", "Hacer postre", "Recoger mesas", "Subir/Limpiar paelleras", "Subir bombonas, aros y patas", "Subir mesas plegables", "Subir las bolsas con lo que ha sobrado a una casa", "Hacer cuentas"].map(name => ({
+  id: uid("t"),
+  name,
+  assigned: []
+}));
 const SEED_PEOPLE = [{
   id: "fam1",
   lastName: "Admin",
@@ -2408,6 +2413,260 @@ function MaterialTypeCard({
     onClick: () => addInventoryItem(type.id)
   }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir ", type.name.toLowerCase()));
 }
+function allPersonsList(people) {
+  const out = [];
+  for (const f of sortByLastName(people)) {
+    if (f.person1?.name) out.push({
+      familyId: f.id,
+      personKey: "person1",
+      name: f.person1.name,
+      lastName: f.lastName
+    });
+    if (f.person2?.name) out.push({
+      familyId: f.id,
+      personKey: "person2",
+      name: f.person2.name,
+      lastName: f.lastName
+    });
+  }
+  return out;
+}
+function personKey(a) {
+  return `${a.familyId}||${a.personKey}`;
+}
+function EncargosTab({
+  encargos,
+  persistEncargos,
+  people,
+  session,
+  canManage
+}) {
+  const [newTaskName, setNewTaskName] = useState("");
+  const allPersons = useMemo(() => allPersonsList(people), [people]);
+  const myFamily = people.find(f => f.id === session.familyId);
+  const mySpouseKey = session.personKey === "person1" ? "person2" : "person1";
+  const mySpouse = myFamily && myFamily[mySpouseKey]?.name ? {
+    familyId: myFamily.id,
+    personKey: mySpouseKey,
+    name: myFamily[mySpouseKey].name
+  } : null;
+  const myself = myFamily ? {
+    familyId: myFamily.id,
+    personKey: session.personKey,
+    name: myFamily[session.personKey]?.name || ""
+  } : null;
+  const updateTask = (id, patch) => persistEncargos({
+    ...encargos,
+    tasks: encargos.tasks.map(t => t.id === id ? {
+      ...t,
+      ...patch
+    } : t)
+  });
+  const addTask = () => {
+    if (!newTaskName.trim()) return;
+    persistEncargos({
+      ...encargos,
+      tasks: [...encargos.tasks, {
+        id: uid("t"),
+        name: newTaskName.trim(),
+        assigned: []
+      }]
+    });
+    setNewTaskName("");
+  };
+  const removeTask = id => persistEncargos({
+    ...encargos,
+    tasks: encargos.tasks.filter(t => t.id !== id)
+  });
+  const publish = () => persistEncargos({
+    ...encargos,
+    published: true
+  });
+  const isAssigned = (task, p) => task.assigned.some(a => a.familyId === p.familyId && a.personKey === p.personKey);
+  const assignPerson = (task, p) => {
+    if (!isAssigned(task, p)) updateTask(task.id, {
+      assigned: [...task.assigned, {
+        familyId: p.familyId,
+        personKey: p.personKey
+      }]
+    });
+  };
+  const unassignPerson = (task, p) => updateTask(task.id, {
+    assigned: task.assigned.filter(a => !(a.familyId === p.familyId && a.personKey === p.personKey))
+  });
+  const personName = a => allPersons.find(p => p.familyId === a.familyId && p.personKey === a.personKey)?.name || "?";
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: THEME.inkSoft,
+      marginTop: 0
+    }
+  }, canManage ? "Prepara la lista de encargos y publícala cuando esté lista." : "Toca tu nombre (o el de tu cónyuge) para apuntarte a un encargo."), canManage && !encargos.published && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#FBEAE4",
+      border: `1px solid ${THEME.tomato}`,
+      color: THEME.tomatoDark,
+      borderRadius: 10,
+      padding: "10px 12px",
+      fontSize: 13,
+      marginBottom: 16
+    }
+  }, "⚠️ Todavía no está publicado. El resto del grupo no ve esta pestaña hasta que la publiques."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      marginBottom: 16
+    }
+  }, encargos.tasks.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t.id,
+    style: {
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      padding: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6
+    }
+  }, canManage ? /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    value: t.name,
+    onChange: e => updateTask(t.id, {
+      name: e.target.value
+    }),
+    style: {
+      flex: 1,
+      fontWeight: 600,
+      fontSize: 14
+    }
+  }) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontWeight: 700,
+      fontFamily: "'Fraunces', serif",
+      fontSize: 15
+    }
+  }, t.name), canManage && /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: () => removeTask(t.id)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 15
+  }, "🗑️"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 8
+    }
+  }, t.assigned.length === 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: THEME.inkSoft
+    }
+  }, "Nadie apuntado"), t.assigned.map((a, i) => {
+    const key = personKey(a);
+    const canRemove = canManage || a.familyId === session.familyId;
+    return /*#__PURE__*/React.createElement("span", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        background: THEME.borderSoft,
+        borderRadius: 20,
+        padding: "3px 10px",
+        fontSize: 12.5
+      }
+    }, personName(a), myself && a.familyId === myself.familyId && a.personKey === myself.personKey ? " 🙋" : "", canRemove && /*#__PURE__*/React.createElement("button", {
+      onClick: () => unassignPerson(t, a),
+      style: {
+        background: "none",
+        border: "none",
+        color: THEME.inkSoft,
+        cursor: "pointer",
+        fontSize: 13,
+        padding: 0,
+        lineHeight: 1
+      }
+    }, "✕"));
+  })), canManage ? /*#__PURE__*/React.createElement("select", {
+    className: "paella-input",
+    value: "",
+    onChange: e => {
+      const [fid, pk] = e.target.value.split("||");
+      if (fid) assignPerson(t, {
+        familyId: fid,
+        personKey: pk
+      });
+    },
+    style: {
+      fontSize: 12.5
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "➕ Asignar a alguien…"), allPersons.filter(p => !isAssigned(t, p)).map(p => /*#__PURE__*/React.createElement("option", {
+    key: personKey(p),
+    value: `${p.familyId}||${p.personKey}`
+  }, p.name, " (", p.lastName, ")"))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, myself && myself.name && !isAssigned(t, myself) && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 12,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => assignPerson(t, myself)
+  }, "🙋 Apuntarme yo"), mySpouse && !isAssigned(t, mySpouse) && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      fontSize: 12,
+      background: "#fff",
+      border: `1px solid ${THEME.border}`
+    },
+    onClick: () => assignPerson(t, mySpouse)
+  }, "Apuntar a ", mySpouse.name))))), canManage && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "paella-input",
+    placeholder: "Nuevo encargo",
+    value: newTaskName,
+    onChange: e => setNewTaskName(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Enter") addTask();
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.olive,
+      color: "#fff"
+    },
+    onClick: addTask
+  }, /*#__PURE__*/React.createElement(Icon, null, "➕"), " Añadir")), !encargos.published && /*#__PURE__*/React.createElement("button", {
+    className: "tab-btn",
+    style: {
+      background: THEME.saffron,
+      color: "#fff",
+      width: "100%",
+      justifyContent: "center",
+      padding: "10px"
+    },
+    onClick: publish
+  }, /*#__PURE__*/React.createElement(Icon, null, "📢"), " Publicar")));
+}
 function StorageTab({
   people,
   persistPeople,
@@ -3098,6 +3357,7 @@ function App() {
   const [history, setHistory] = useState(null);
   const [people, setPeople] = useState(null);
   const [inventory, setInventory] = useState(null);
+  const [encargos, setEncargos] = useState(null);
   const [session, setSession] = useState(null); // { familyId, personKey }
   const [previewSession, setPreviewSession] = useState(null); // admin-only "view as" mode
   const [tab, setTabState] = useState(() => {
@@ -3219,11 +3479,20 @@ function App() {
       inv = SEED_INVENTORY;
       await storage.set("paella-inventory", inv);
     }
+    let enc = await storage.get("paella-encargos");
+    if (!enc) {
+      enc = {
+        published: false,
+        tasks: SEED_ENCARGOS
+      };
+      await storage.set("paella-encargos", enc);
+    }
     setData(d);
     setShoppingList(sl);
     setHistory(h);
     setPeople(p);
     setInventory(inv);
+    setEncargos(enc);
     return p;
   }, []);
   const setTab = useCallback(newTab => {
@@ -3293,6 +3562,18 @@ function App() {
       setTimeout(() => setSavingNote(""), 900);
     } catch {
       setError("No se ha podido guardar el inventario.");
+      setTimeout(() => setError(""), 2500);
+    }
+  }, []);
+  const persistEncargos = useCallback(async next => {
+    setEncargos(next);
+    try {
+      setSavingNote("Guardando…");
+      await storage.set("paella-encargos", next);
+      setSavingNote("Guardado");
+      setTimeout(() => setSavingNote(""), 900);
+    } catch {
+      setError("No se ha podido guardar los encargos.");
       setTimeout(() => setError(""), 2500);
     }
   }, []);
@@ -3681,7 +3962,7 @@ function App() {
       pct: Math.round(done / needed.length * 100)
     };
   }, [shoppingList]);
-  if (loading || !people || !inventory) return /*#__PURE__*/React.createElement("div", {
+  if (loading || !people || !inventory || !encargos) return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.cream,
       minHeight: "100vh",
@@ -3883,11 +4164,11 @@ function App() {
     icon: "🏠",
     label: "Guardado",
     onClick: () => setTab("storage")
-  }), /*#__PURE__*/React.createElement(NavItem, {
-    active: tab === "guardado",
-    icon: "🏠",
-    label: "Guardado",
-    onClick: () => setTab("guardado")
+  }), (perms.canManageIngredients || encargos && encargos.published) && /*#__PURE__*/React.createElement(NavItem, {
+    active: tab === "encargos",
+    icon: "📋",
+    label: "Encargos",
+    onClick: () => setTab("encargos")
   }), perms.canManageOptions && /*#__PURE__*/React.createElement(NavItem, {
     active: tab === "options",
     icon: "⚙️",
@@ -3971,6 +4252,12 @@ function App() {
     session: effectiveSession,
     isAdmin: perms.isAdmin,
     canToggle: perms.canToggleShopping
+  }), tab === "encargos" && /*#__PURE__*/React.createElement(EncargosTab, {
+    encargos: encargos,
+    persistEncargos: persistEncargos,
+    people: people,
+    session: effectiveSession,
+    canManage: perms.canManageIngredients
   }), tab === "guardado" && /*#__PURE__*/React.createElement(GuardadoTab, {
     people: people,
     persistPeople: persistPeople,
