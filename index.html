@@ -4125,7 +4125,7 @@ function App() {
     if (!shoppingList) return [];
     const bySupermarket = new Map();
     for (const it of shoppingList.items) {
-      const smKey = it.supermarketName || "Sin supermercado";
+      const smKey = it.supermarketName || "Cualquier supermercado";
       if (!bySupermarket.has(smKey)) bySupermarket.set(smKey, new Map());
       const catMap = bySupermarket.get(smKey);
       const catKey = it.categoryName || "Sin categoría";
@@ -4134,8 +4134,8 @@ function App() {
     }
     const entries = Array.from(bySupermarket.entries()).map(([sm, catMap]) => [sm, Array.from(catMap.entries())]);
     entries.sort((a, b) => {
-      if (a[0] === "Sin supermercado") return 1;
-      if (b[0] === "Sin supermercado") return -1;
+      if (a[0] === "Cualquier supermercado") return 1;
+      if (b[0] === "Cualquier supermercado") return -1;
       return 0;
     });
     return entries;
@@ -4703,15 +4703,21 @@ function IngredientsTab({
   resetCurrentQty
 }) {
   const categories = data.categories || [];
+  const [smFilter, setSmFilter] = useState("all"); // all | with | without
+  const filteredIngredients = useMemo(() => {
+    if (smFilter === "with") return data.ingredients.filter(i => i.supermarketId);
+    if (smFilter === "without") return data.ingredients.filter(i => !i.supermarketId);
+    return data.ingredients;
+  }, [data.ingredients, smFilter]);
   const groups = useMemo(() => {
     const map = new Map();
-    for (const ing of data.ingredients) {
+    for (const ing of filteredIngredients) {
       const key = ing.categoryId || "";
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(ing);
     }
     return Array.from(map.entries());
-  }, [data.ingredients]);
+  }, [filteredIngredients]);
   const [openGroups, setOpenGroups] = useState(() => new Set(groups.length ? [groups[0][0]] : []));
   const toggleGroup = key => setOpenGroups(prev => {
     const next = new Set(prev);
@@ -4737,7 +4743,7 @@ function IngredientsTab({
     style: {
       display: "flex",
       gap: 8,
-      marginBottom: 14,
+      marginBottom: 10,
       flexWrap: "wrap"
     }
   }, !readOnly && /*#__PURE__*/React.createElement("button", {
@@ -4758,7 +4764,30 @@ function IngredientsTab({
       color: THEME.inkSoft
     },
     onClick: toggleAllGroups
-  }, allGroupsOpen ? "▲ Contraer todas" : "▼ Expandir todas")), groups.map(([catId, items]) => {
+  }, allGroupsOpen ? "▲ Contraer todas" : "▼ Expandir todas")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginBottom: 14,
+      flexWrap: "wrap"
+    }
+  }, [["all", "Todos"], ["with", "🏪 Con supermercado"], ["without", "Sin supermercado"]].map(([val, label]) => /*#__PURE__*/React.createElement("button", {
+    key: val,
+    className: "tab-btn",
+    style: {
+      fontSize: 12.5,
+      background: smFilter === val ? THEME.saffron : "#fff",
+      color: smFilter === val ? "#fff" : THEME.inkSoft,
+      border: `1px solid ${smFilter === val ? THEME.saffron : THEME.border}`,
+      padding: "5px 10px"
+    },
+    onClick: () => setSmFilter(val)
+  }, label))), groups.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      color: THEME.inkSoft
+    }
+  }, "No hay ingredientes que coincidan con este filtro."), groups.map(([catId, items]) => {
     const open = openGroups.has(catId);
     const label = catName(catId);
     return /*#__PURE__*/React.createElement("div", {
@@ -4947,6 +4976,7 @@ function IngredientRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const categories = data.categories || [];
+  const smName = ing.supermarketId ? data.supermarkets.find(s => s.id === ing.supermarketId)?.name || "" : "";
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.card,
@@ -4983,7 +5013,14 @@ function IngredientRow({
       fontSize: 15.5,
       padding: "8px 10px"
     }
-  })), /*#__PURE__*/React.createElement("div", {
+  })), smName && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: THEME.saffronDark,
+      marginTop: 4,
+      marginLeft: readOnly ? 0 : 26
+    }
+  }, "🏪 ", smName), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "flex-end",
