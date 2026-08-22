@@ -4123,13 +4123,16 @@ function App() {
   });
   const grouped = useMemo(() => {
     if (!shoppingList) return [];
-    const map = new Map();
+    const bySupermarket = new Map();
     for (const it of shoppingList.items) {
-      const key = it.supermarketName || "Sin supermercado";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(it);
+      const smKey = it.supermarketName || "Sin supermercado";
+      if (!bySupermarket.has(smKey)) bySupermarket.set(smKey, new Map());
+      const catMap = bySupermarket.get(smKey);
+      const catKey = it.categoryName || "Sin categoría";
+      if (!catMap.has(catKey)) catMap.set(catKey, []);
+      catMap.get(catKey).push(it);
     }
-    const entries = Array.from(map.entries());
+    const entries = Array.from(bySupermarket.entries()).map(([sm, catMap]) => [sm, Array.from(catMap.entries())]);
     entries.sort((a, b) => {
       if (a[0] === "Sin supermercado") return 1;
       if (b[0] === "Sin supermercado") return -1;
@@ -5661,9 +5664,10 @@ function ShoppingTab({
     if (viewFilter === "unassigned") return !it.assignedTo;
     return it.assignedTo?.name === viewFilter;
   };
-  const displayGrouped = grouped.map(([catName, items]) => [catName, items.filter(matchesFilter)]).filter(([, items]) => items.length > 0);
-  const allCatsOpen = displayGrouped.length > 0 && displayGrouped.every(([catName]) => openCats.has(catName));
-  const toggleAllCats = () => setOpenCats(allCatsOpen ? new Set() : new Set(displayGrouped.map(([catName]) => catName)));
+  const displayGrouped = grouped.map(([sm, cats]) => [sm, cats.map(([catName, items]) => [catName, items.filter(matchesFilter)]).filter(([, items]) => items.length > 0)]).filter(([, cats]) => cats.length > 0);
+  const allCatKeys = displayGrouped.flatMap(([sm, cats]) => cats.map(([catName]) => `${sm}||${catName}`));
+  const allCatsOpen = allCatKeys.length > 0 && allCatKeys.every(k => openCats.has(k));
+  const toggleAllCats = () => setOpenCats(allCatsOpen ? new Set() : new Set(allCatKeys));
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: THEME.card,
@@ -5933,19 +5937,37 @@ function ShoppingTab({
       color: "#fff"
     },
     onClick: confirmOverrideCategory
-  }, "Confirmar")))), displayGrouped.map(([catName, items]) => {
-    const catOpen = openCats.has(catName);
+  }, "Confirmar")))), displayGrouped.map(([smName, cats]) => /*#__PURE__*/React.createElement("div", {
+    key: smName,
+    style: {
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 17,
+      margin: "0 0 10px",
+      color: THEME.ink,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 16
+  }, "🏪"), " ", smName), cats.map(([catName, items]) => {
+    const catKey = `${smName}||${catName}`;
+    const catOpen = openCats.has(catKey);
     const allCatSelected = dividing && items.length > 0 && items.every(it => pendingSelection.has(it.id));
     return /*#__PURE__*/React.createElement("div", {
-      key: catName,
+      key: catKey,
       style: {
-        marginBottom: 18,
+        marginBottom: 14,
         border: `1px solid ${THEME.border}`,
         borderRadius: 12,
         overflow: "hidden"
       }
     }, /*#__PURE__*/React.createElement("div", {
-      onClick: () => toggleCat(catName),
+      onClick: () => toggleCat(catKey),
       style: {
         display: "flex",
         alignItems: "center",
@@ -6132,7 +6154,7 @@ function ShoppingTab({
         size: 13
       }, "🕘"), " Historial")));
     })));
-  }), historyFor && /*#__PURE__*/React.createElement(IngredientHistoryModal, {
+  }))), historyFor && /*#__PURE__*/React.createElement(IngredientHistoryModal, {
     ing: historyFor,
     history: history,
     onClose: () => setHistoryFor(null)
