@@ -60,6 +60,26 @@ const storage = {
     const rows = await res.json();
     return rows.length ? rows[0].value : null;
   },
+  // Igual que get(), pero también devuelve "updated_at", necesario para el guardado condicional.
+  async getWithMeta(key) {
+    const url = `${SUPABASE_URL}/rest/v1/app_storage?key=eq.${encodeURIComponent(key)}&select=value,updated_at`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+      }
+    });
+    if (!res.ok) throw new Error(`Supabase GET ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    if (!rows.length) return {
+      value: null,
+      updatedAt: null
+    };
+    return {
+      value: rows[0].value,
+      updatedAt: rows[0].updated_at
+    };
+  },
   async set(key, value) {
     const url = `${SUPABASE_URL}/rest/v1/app_storage`;
     const res = await fetch(url, {
@@ -78,8 +98,59 @@ const storage = {
     });
     if (!res.ok) throw new Error(`Supabase POST ${res.status}: ${await res.text()}`);
     return true;
+  },
+  // Guarda solo si nadie ha tocado esta clave desde que se leyó "expectedUpdatedAt".
+  // Si alguien ya guardó algo mientras tanto, no escribe nada y devuelve { ok: false }.
+  async casSet(key, value, expectedUpdatedAt) {
+    const nowIso = new Date().toISOString();
+    if (!expectedUpdatedAt) {
+      // No teníamos una versión previa conocida (clave nueva o primera vez): guardado normal.
+      await storage.set(key, value);
+      return {
+        ok: true,
+        updatedAt: nowIso
+      };
+    }
+    const url = `${SUPABASE_URL}/rest/v1/app_storage?key=eq.${encodeURIComponent(key)}&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify({
+        value,
+        updated_at: nowIso
+      })
+    });
+    if (!res.ok) throw new Error(`Supabase PATCH ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    if (!rows.length) return {
+      ok: false
+    };
+    return {
+      ok: true,
+      updatedAt: nowIso
+    };
   }
 };
+
+// Lee, fusiona y guarda de forma seguida; si alguien más guardó justo entre medias,
+// lo detecta (el guardado condicional falla) y vuelve a intentarlo con los datos ya actualizados.
+async function persistWithRetry(key, computeMerged, maxAttempts = 5) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const {
+      value: fresh,
+      updatedAt
+    } = await storage.getWithMeta(key);
+    const merged = computeMerged(fresh);
+    const result = await storage.casSet(key, merged, updatedAt);
+    if (result.ok) return merged;
+  }
+  throw new Error("No se pudo guardar tras varios intentos (alguien más estaba guardando a la vez). Vuelve a intentarlo.");
+}
 const THEME = {
   cream: "#FBF3E1",
   card: "#FFFDF8",
@@ -3637,10 +3708,8 @@ function App() {
     setPeople(next);
     try {
       setSavingNote("Guardando…");
-      const fresh = (await storage.get("paella-people")) || [];
-      const merged = mergeCollection(fresh, people, next);
+      const merged = await persistWithRetry("paella-people", fresh => mergeCollection(fresh || [], people, next));
       setPeople(merged);
-      await storage.set("paella-people", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
@@ -3652,10 +3721,8 @@ function App() {
     setInventory(next);
     try {
       setSavingNote("Guardando…");
-      const fresh = (await storage.get("paella-inventory")) || [];
-      const merged = mergeNestedCollection(fresh, inventory, next, "items");
+      const merged = await persistWithRetry("paella-inventory", fresh => mergeNestedCollection(fresh || [], inventory, next, "items"));
       setInventory(merged);
-      await storage.set("paella-inventory", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
@@ -3667,18 +3734,19 @@ function App() {
     setEncargos(next);
     try {
       setSavingNote("Guardando…");
-      const fresh = (await storage.get("paella-encargos")) || {
-        published: false,
-        tasks: []
-      };
-      const mergedTasks = mergeNestedCollection(fresh.tasks, encargos.tasks, next.tasks, "assigned", a => `${a.familyId}||${a.personKey}`);
-      const merged = {
-        ...fresh,
-        published: next.published,
-        tasks: mergedTasks
-      };
+      const merged = await persistWithRetry("paella-encargos", fresh => {
+        const f = fresh || {
+          published: false,
+          tasks: []
+        };
+        const mergedTasks = mergeNestedCollection(f.tasks, encargos.tasks, next.tasks, "assigned", a => `${a.familyId}||${a.personKey}`);
+        return {
+          ...f,
+          published: next.published,
+          tasks: mergedTasks
+        };
+      });
       setEncargos(merged);
-      await storage.set("paella-encargos", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
@@ -3739,10 +3807,8 @@ function App() {
     setData(next);
     try {
       setSavingNote("Guardando…");
-      const fresh = (await storage.get("paella-club-data")) || {};
-      const merged = mergeClubData(fresh, data, next);
+      const merged = await persistWithRetry("paella-club-data", fresh => mergeClubData(fresh || {}, data, next));
       setData(merged);
-      await storage.set("paella-club-data", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
@@ -3753,20 +3819,16 @@ function App() {
   const persistShoppingList = useCallback(async next => {
     setShoppingList(next);
     try {
-      const fresh = await storage.get("paella-shopping-list");
-      if (!fresh || !shoppingList) {
-        setShoppingList(next);
-        await storage.set("paella-shopping-list", next);
-        return;
-      }
-      const mergedItems = mergeCollection(fresh.items, shoppingList.items, next.items);
-      const merged = {
-        ...fresh,
-        generatedAt: next.generatedAt || fresh.generatedAt,
-        items: mergedItems
-      };
+      const merged = await persistWithRetry("paella-shopping-list", fresh => {
+        if (!fresh || !shoppingList) return next;
+        const mergedItems = mergeCollection(fresh.items, shoppingList.items, next.items);
+        return {
+          ...fresh,
+          generatedAt: next.generatedAt || fresh.generatedAt,
+          items: mergedItems
+        };
+      });
       setShoppingList(merged);
-      await storage.set("paella-shopping-list", merged);
     } catch {
       setError("No se ha podido guardar la lista de la compra.");
       setTimeout(() => setError(""), 2500);
@@ -3776,10 +3838,8 @@ function App() {
     setHistory(next);
     try {
       setSavingNote("Guardando…");
-      const fresh = (await storage.get("paella-history")) || [];
-      const merged = mergeHistoryData(fresh, history, next);
+      const merged = await persistWithRetry("paella-history", fresh => mergeHistoryData(fresh || [], history, next));
       setHistory(merged);
-      await storage.set("paella-history", merged);
       setSavingNote("Guardado");
       setTimeout(() => setSavingNote(""), 900);
     } catch {
