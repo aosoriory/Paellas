@@ -1,0 +1,33 @@
+name: Keep-alive (evita que Supabase pause el proyecto por inactividad)
+
+# Se ejecuta cada 3 días — Supabase pausa un proyecto del plan gratuito tras 7 días sin
+# actividad de base de datos, así que 3 días de margen es de sobra. Cada ejecución hace una
+# consulta ligera directamente a la API REST de Supabase (esta app llama a Supabase desde el
+# propio navegador, con una clave pública que ya está expuesta en el código desplegado — no es
+# ningún secreto nuevo que se esté filtrando aquí).
+#
+# Nota importante: GitHub desactiva en silencio los workflows programados si el REPOSITORIO
+# entero lleva 60 días sin ningún commit (no solo sin ejecuciones de este workflow). En temporada
+# baja de Paellas Tozal eso puede pasar. Conviene comprobar de vez en cuando (p.ej. en la
+# pestaña "Actions" de GitHub) que este workflow se sigue ejecutando, sobre todo si ha pasado
+# mucho tiempo sin tocar el código.
+on:
+  schedule:
+    - cron: '0 6 */3 * *'  # cada 3 días a las 06:00 UTC
+  workflow_dispatch: {}     # permite lanzarlo a mano desde la pestaña Actions, para probarlo
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pinguear Supabase (genera actividad real)
+        env:
+          SUPABASE_URL: "https://awhuyuhjqmpteqnxwlgw.supabase.co"
+          SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3aHV5dWhqcW1wdGVxbnh3bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDQ0NjMsImV4cCI6MjEwMjcyMDQ2M30.0X2bxSxFn93am5EXHbxLrE0GZg_ujtAcLoKkjn5pPS8"
+        run: |
+          echo "Pingueando ${SUPABASE_URL}/rest/v1/app_storage ..."
+          curl -sf -o /dev/null -w "Código de respuesta: %{http_code}\n" \
+            "${SUPABASE_URL}/rest/v1/app_storage?select=key&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            || (echo "⚠️ El ping ha fallado — revisa manualmente el proyecto." && exit 1)
