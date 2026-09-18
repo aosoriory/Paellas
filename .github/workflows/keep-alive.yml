@@ -1,10 +1,14 @@
 name: Keep-alive (evita que Supabase pause el proyecto por inactividad)
 
-# Se ejecuta cada 3 días — Supabase pausa un proyecto del plan gratuito tras 7 días sin
-# actividad de base de datos, así que 3 días de margen es de sobra. Cada ejecución hace una
-# consulta ligera directamente a la API REST de Supabase (esta app llama a Supabase desde el
-# propio navegador, con una clave pública que ya está expuesta en el código desplegado — no es
-# ningún secreto nuevo que se esté filtrando aquí).
+# Se ejecuta a diario — antes era cada 3 días, pero aun así llegó un aviso de Supabase de
+# que iban a pausar el proyecto (con las ejecuciones registradas como correctas, así que el
+# problema no era que fallase, sino el margen: basta que GitHub retrase una ejecución
+# programada — algo que hace de vez en cuando, sobre todo en el plan gratuito — para que se
+# acumulen más de los 7 días sin actividad que hacen que Supabase pause el proyecto. A
+# diario queda mucho más margen. Cada ejecución hace una consulta ligera directamente a la
+# API REST de Supabase (esta app llama a Supabase desde el propio navegador, con una clave
+# pública que ya está expuesta en el código desplegado — no es ningún secreto nuevo que se
+# esté filtrando aquí).
 #
 # Nota importante: GitHub desactiva en silencio los workflows programados si el REPOSITORIO
 # entero lleva 60 días sin ningún commit (no solo sin ejecuciones de este workflow). En temporada
@@ -13,7 +17,7 @@ name: Keep-alive (evita que Supabase pause el proyecto por inactividad)
 # mucho tiempo sin tocar el código.
 on:
   schedule:
-    - cron: '0 6 */3 * *'  # cada 3 días a las 06:00 UTC
+    - cron: '0 6 * * *'  # a diario, a las 06:00 UTC
   workflow_dispatch: {}     # permite lanzarlo a mano desde la pestaña Actions, para probarlo
 
 jobs:
