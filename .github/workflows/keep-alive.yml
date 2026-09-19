@@ -10,11 +10,11 @@ name: Keep-alive (evita que Supabase pause el proyecto por inactividad)
 # pública que ya está expuesta en el código desplegado — no es ningún secreto nuevo que se
 # esté filtrando aquí).
 #
-# Nota importante: GitHub desactiva en silencio los workflows programados si el REPOSITORIO
-# entero lleva 60 días sin ningún commit (no solo sin ejecuciones de este workflow). En temporada
-# baja de Paellas Tozal eso puede pasar. Conviene comprobar de vez en cuando (p.ej. en la
-# pestaña "Actions" de GitHub) que este workflow se sigue ejecutando, sobre todo si ha pasado
-# mucho tiempo sin tocar el código.
+# Este mismo workflow se encarga también de que GitHub no se desactive a sí mismo: GitHub
+# apaga en silencio los workflows programados de cualquier repositorio que lleve 60 días
+# sin ningún commit (no basta con que este workflow se siga ejecutando; hace falta un commit
+# real). El segundo job de abajo comprueba la fecha del último commit y, si hace más de 50
+# días, crea uno vacío automáticamente, para no depender de acordarnos de tocar el código.
 on:
   schedule:
     - cron: '0 6 * * *'  # a diario, a las 06:00 UTC
@@ -35,3 +35,26 @@ jobs:
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             || (echo "⚠️ El ping ha fallado — revisa manualmente el proyecto." && exit 1)
+
+  mantener-workflows-activos:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Comprobar repositorio
+        uses: actions/checkout@v4
+      - name: Commit vacío si hace más de 50 días que no se toca el código
+        run: |
+          ULTIMO=$(git log -1 --format=%ct)
+          AHORA=$(date +%s)
+          DIAS=$(( (AHORA - ULTIMO) / 86400 ))
+          echo "Han pasado $DIAS días desde el último commit."
+          if [ "$DIAS" -ge 50 ]; then
+            echo "Han pasado 50 días o más: creando un commit vacío para que GitHub no desactive los workflows programados."
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: commit vacío para evitar que GitHub desactive los workflows programados (60 días sin actividad)"
+            git push
+          else
+            echo "Todavía quedan $((50 - DIAS)) días de margen, no hace falta."
+          fi
