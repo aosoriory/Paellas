@@ -24,17 +24,30 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Pinguear Supabase (genera actividad real)
+      - name: Escribir en Supabase (genera actividad real)
+        # Una simple lectura (GET) no basta: aun con el ping diario funcionando, Supabase avisó
+        # de que pausaría el proyecto por falta de actividad. Su detección mira la actividad real
+        # de la base de datos, y lo que se recomienda es una escritura. Así que cada día se
+        # guarda (upsert) una fila propia, "__keepalive", en app_storage, con la fecha; la app
+        # nunca lee esa clave, así que no le afecta.
         env:
           SUPABASE_URL: "https://awhuyuhjqmpteqnxwlgw.supabase.co"
           SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3aHV5dWhqcW1wdGVxbnh3bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDQ0NjMsImV4cCI6MjEwMjcyMDQ2M30.0X2bxSxFn93am5EXHbxLrE0GZg_ujtAcLoKkjn5pPS8"
         run: |
-          echo "Pingueando ${SUPABASE_URL}/rest/v1/app_storage ..."
+          AHORA=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "Escribiendo __keepalive en ${SUPABASE_URL}/rest/v1/app_storage ..."
           curl -sf -o /dev/null -w "Código de respuesta: %{http_code}\n" \
-            "${SUPABASE_URL}/rest/v1/app_storage?select=key&limit=1" \
+            -X POST "${SUPABASE_URL}/rest/v1/app_storage" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            || (echo "⚠️ El ping ha fallado — revisa manualmente el proyecto." && exit 1)
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates,return=minimal" \
+            -d "{\"key\":\"__keepalive\",\"value\":{\"ultimoPing\":\"${AHORA}\"},\"updated_at\":\"${AHORA}\"}" \
+            || (echo "⚠️ La escritura ha fallado — revisa manualmente el proyecto." && exit 1)
+          echo "Comprobando que se ha guardado..."
+          curl -sf "${SUPABASE_URL}/rest/v1/app_storage?key=eq.__keepalive&select=updated_at" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${SUPABASE_ANON_KEY}"
+          echo
 
   mantener-workflows-activos:
     runs-on: ubuntu-latest
